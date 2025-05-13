@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simulation - Système Multi-Agents Cloud</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.1.3/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f8f9fa;
+            padding-top: 20px;
+        }
+        .card {
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+            border-radius: 10px;
+            border: none;
+        }
+        .card-header {
+            background-color: #fff;
+            border-bottom: 1px solid #eee;
+            font-weight: 600;
+            border-radius: 10px 10px 0 0 !important;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="row mb-4">
+            <div class="col-12">
+                <nav class="navbar navbar-expand-lg navbar-light bg-light rounded shadow-sm">
+                    <div class="container-fluid">
+                        <a class="navbar-brand" href="/">
+                            <i class="fas fa-cloud me-2"></i>Cloud MAS
+                        </a>
+                        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                            <span class="navbar-toggler-icon"></span>
+                        </button>
+                        <div class="collapse navbar-collapse" id="navbarNav">
+                            <ul class="navbar-nav">
+                                <li class="nav-item">
+                                    <a class="nav-link" href="/">
+                                        <i class="fas fa-tachometer-alt me-1"></i>Tableau de bord
+                                    </a>
+                                </li>
+                                <li class="nav-item">
+                                    <a class="nav-link active" href="/simulation">
+                                        <i class="fas fa-flask me-1"></i>Simulation
+                                    </a>
+                                </li>
+                            </ul>
+                        </div>
+                        <span class="navbar-text">
+                            <span class="badge bg-success" id="system-status">En ligne</span>
+                        </span>
+                    </div>
+                </nav>
+            </div>
+        </div>
+
+        <div class="row mb-4">
+            <div class="col-12">
+                <h1 class="text-center">Simulation de Charge - Système Multi-Agents</h1>
+                <p class="text-center text-muted">Interface de contrôle des tests de charge</p>
+            </div>
+        </div>
+
+        <div class="row">
+            <!-- Simulation de charge constante -->
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <i class="fas fa-rocket me-2"></i> Test de charge constante
+                    </div>
+                    <div class="card-body">
+                        <form id="constant-load-form">
+                            <div class="mb-3">
+                                <label class="form-label">Durée (secondes)</label>
+                                <input type="number" class="form-control" id="duration" value="300" min="10" max="1800">
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Intervalle entre demandes (secondes)</label>
+                                <input type="number" class="form-control" id="request-interval" value="5" min="1" max="30">
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Ratio de clients VIP (%)</label>
+                                <input type="range" class="form-range" id="vip-ratio" value="20" min="0" max="100">
+                                <div class="text-center" id="vip-ratio-value">20%</div>
+                            </div>
+                            <button type="submit" class="btn btn-primary w-100">Lancer la simulation</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Simulation de pic de charge -->
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <i class="fas fa-bolt me-2"></i> Simulation de pic de charge
+                    </div>
+                    <div class="card-body">
+                        <form id="burst-load-form">
+                            <div class="mb-3">
+                                <label class="form-label">Nombre de demandes simultanées</label>
+                                <input type="number" class="form-control" id="burst-size" value="10" min="2" max="50">
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Type de demandes</label>
+                                <select class="form-select" id="burst-type">
+                                    <option value="mixed">Mixte (VIP + Standard)</option>
+                                    <option value="vip">VIP uniquement</option>
+                                    <option value="standard">Standard uniquement</option>
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Inclure des dépendances</label>
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input" type="checkbox" id="include-dependencies">
+                                    <label class="form-check-label" for="include-dependencies">Activer</label>
+                                </div>
+                            </div>
+                            <button type="submit" class="btn btn-danger w-100">Simuler un pic de charge</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Statut de la simulation -->
+        <div class="row mt-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <i class="fas fa-chart-line me-2"></i> Statut de la simulation
+                    </div>
+                    <div class="card-body">
+                        <div id="simulation-status" class="alert alert-info">
+                            Aucune simulation en cours. Utilisez les formulaires ci-dessus pour démarrer une simulation.
+                        </div>
+                        <div class="progress mb-3" style="height: 25px;">
+                            <div id="simulation-progress" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">0%</div>
+                        </div>
+                        <div class="row text-center">
+                            <div class="col-4">
+                                <div class="h4 mb-0" id="simulation-requests-sent">0</div>
+                                <div class="small text-muted">Demandes envoyées</div>
+                            </div>
+                            <div class="col-4">
+                                <div class="h4 mb-0" id="simulation-requests-active">0</div>
+                                <div class="small text-muted">Demandes actives</div>
+                            </div>
+                            <div class="col-4">
+                                <div class="h4 mb-0" id="simulation-requests-completed">0</div>
+                                <div class="small text-muted">Demandes complétées</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.1.3/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Mise à jour de l'affichage du ratio VIP
+        document.getElementById('vip-ratio').addEventListener('input', function() {
+            document.getElementById('vip-ratio-value').innerText = this.value + '%';
+        });
+
+        // Gestion du formulaire de charge constante
+        document.getElementById('constant-load-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+
+            const duration = document.getElementById('duration').value;
+            const requestInterval = document.getElementById('request-interval').value;
+            const vipRatio = document.getElementById('vip-ratio').value / 100;
+
+            startSimulation('constant', {
+                duration,
+                requestInterval,
+                vipRatio
+            });
+        });
+
+        // Gestion du formulaire de pic de charge
+        document.getElementById('burst-load-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+
+            const burstSize = document.getElementById('burst-size').value;
+            const burstType = document.getElementById('burst-type').value;
+            const includeDependencies = document.getElementById('include-dependencies').checked;
+
+            startSimulation('burst', {
+                burstSize,
+                burstType,
+                includeDependencies
+            });
+        });
+
+        // Fonction pour démarrer une simulation
+        function startSimulation(type, params) {
+            // Mettre à jour l'interface
+            document.getElementById('simulation-status').innerHTML =
+                `<strong>Simulation en cours:</strong> ${type === 'constant' ? 'Charge constante' : 'Pic de charge'}`;
+            document.getElementById('simulation-status').className = 'alert alert-warning';
+            document.getElementById('simulation-progress').style.width = '0%';
+            document.getElementById('simulation-progress').innerText = '0%';
+
+            // Envoyer la requête au serveur
+            fetch('/api/simulation/start', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    type,
+                    ...params
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'started') {
+                    pollSimulationStatus();
+                } else {
+                    document.getElementById('simulation-status').innerHTML =
+                        `<strong>Erreur:</strong> ${data.message || 'Impossible de démarrer la simulation.'}`;
+                    document.getElementById('simulation-status').className = 'alert alert-danger';
+                }
+            })
+            .catch(error => {
+                document.getElementById('simulation-status').innerHTML =
+                    `<strong>Erreur:</strong> ${error.message || 'Impossible de démarrer la simulation.'}`;
+                document.getElementById('simulation-status').className = 'alert alert-danger';
+            });
+        }
+
+        // Fonction pour interroger le statut de la simulation
+        function pollSimulationStatus() {
+            fetch('/api/simulation/status')
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('simulation-requests-sent').innerText = data.requests_sent || '0';
+                    document.getElementById('simulation-requests-active').innerText = data.requests_active || '0';
+                    document.getElementById('simulation-requests-completed').innerText = data.requests_completed || '0';
+
+                    let progress = 0;
+                    if (data.total_duration > 0) {
+                        progress = Math.min(100, Math.round((data.elapsed_time / data.total_duration) * 100));
+                    }
+
+                    document.getElementById('simulation-progress').style.width = progress + '%';
+                    document.getElementById('simulation-progress').innerText = progress + '%';
+
+                    if (data.status === 'completed') {
+                        document.getElementById('simulation-status').innerHTML =
+                            `<strong>Simulation terminée!</strong> ${data.requests_completed} demandes traitées sur ${data.requests_sent} envoyées.`;
+                        document.getElementById('simulation-status').className = 'alert alert-success';
+                    } else if (data.status === 'running') {
+                        setTimeout(pollSimulationStatus, 1000);
+                    }
+                })
+                .catch(error => {
+                    setTimeout(pollSimulationStatus, 2000);
+                });
+        }
+    </script>
+</body>
+</html>

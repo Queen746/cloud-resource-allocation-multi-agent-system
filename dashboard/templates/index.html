@@ -1,0 +1,861 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - Système Multi-Agents Cloud</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.1.3/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f8f9fa;
+            padding-top: 20px;
+        }
+        .card {
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+            border-radius: 10px;
+            border: none;
+        }
+        .card-header {
+            background-color: #fff;
+            border-bottom: 1px solid #eee;
+            font-weight: 600;
+            border-radius: 10px 10px 0 0 !important;
+        }
+        .big-number {
+            font-size: 2.5rem;
+            font-weight: 700;
+            line-height: 1;
+        }
+        .metric-label {
+            font-size: 0.9rem;
+            color: #6c757d;
+            margin-top: 0.25rem;
+        }
+        .event-box {
+            max-height: 350px;
+            overflow-y: auto;
+        }
+        .dashboard-title {
+            border-bottom: 1px solid #dee2e6;
+            padding-bottom: 15px;
+            margin-bottom: 20px;
+        }
+        .last-update {
+            font-size: 0.8rem;
+            color: #6c757d;
+        }
+        .metric-card {
+            text-align: center;
+            padding: 15px 10px;
+        }
+        .server-metric {
+            margin-bottom: 5px;
+            border-left: 3px solid transparent;
+            padding-left: 10px;
+        }
+        .server-metric-high {
+            border-left-color: #ffc107;
+        }
+        .server-metric-critical {
+            border-left-color: #dc3545;
+        }
+        .aws-info {
+            background-color: #f1faff;
+            border-left: 4px solid #0dcaf0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="row mb-4">
+            <div class="col-12">
+                <nav class="navbar navbar-expand-lg navbar-light bg-light rounded shadow-sm">
+                    <div class="container-fluid">
+                        <a class="navbar-brand" href="/">
+                            <i class="fas fa-cloud me-2"></i>Cloud MAS
+                        </a>
+                        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                            <span class="navbar-toggler-icon"></span>
+                        </button>
+                        <div class="collapse navbar-collapse" id="navbarNav">
+                            <ul class="navbar-nav">
+                                <li class="nav-item">
+                                    <a class="nav-link active" href="/">
+                                        <i class="fas fa-tachometer-alt me-1"></i>Tableau de bord
+                                    </a>
+                                </li>
+                                <li class="nav-item">
+                                    <a class="nav-link" href="/simulation">
+                                        <i class="fas fa-flask me-1"></i>Simulation
+                                    </a>
+                                </li>
+                            </ul>
+                        </div>
+                        <span class="navbar-text">
+                            <span class="badge bg-success" id="system-status">En ligne</span>
+                        </span>
+                    </div>
+                </nav>
+            </div>
+        </div>
+
+        <div class="row mb-4">
+            <div class="col-12">
+                <h1 class="dashboard-title">Système Multi-Agents pour la Gestion des Demandes Clientèles Cloud</h1>
+                <p class="text-muted">Dashboard de monitoring en temps réel <span class="last-update">Dernière mise à jour : <span id="lastUpdate">00:00:00</span></span></p>
+            </div>
+        </div>
+
+        <!-- Files d'attente et Ressources -->
+        <div class="row">
+            <!-- Files d'attente -->
+            <div class="col-md-6 col-lg-3 mb-4">
+                <div class="card h-100">
+                    <div class="card-header">
+                        <i class="fas fa-list me-2"></i>Files d'attente
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-6 metric-card">
+                                <div class="big-number" id="vipQueueSize">0</div>
+                                <div class="metric-label">File VIP</div>
+                            </div>
+                            <div class="col-6 metric-card">
+                                <div class="big-number" id="standardQueueSize">0</div>
+                                <div class="metric-label">File Standard</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Temps d'attente -->
+            <div class="col-md-6 col-lg-3 mb-4">
+                <div class="card h-100">
+                    <div class="card-header">
+                        <i class="fas fa-clock me-2"></i>Temps d'attente moyen
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-6 metric-card">
+                                <div class="big-number" id="vipWaitTime">0.0</div>
+                                <div class="metric-label">Clients VIP</div>
+                            </div>
+                            <div class="col-6 metric-card">
+                                <div class="big-number" id="standardWaitTime">0.0</div>
+                                <div class="metric-label">Clients Standard</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Utilisation des ressources -->
+            <div class="col-md-6 col-lg-3 mb-4">
+                <div class="card h-100">
+                    <div class="card-header">
+                        <i class="fas fa-microchip me-2"></i>Utilisation des ressources
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-6 metric-card">
+                                <div class="big-number" id="cpuUsage">0.0</div>
+                                <div class="metric-label">CPU (%)</div>
+                            </div>
+                            <div class="col-6 metric-card">
+                                <div class="big-number" id="memoryUsage">0.0</div>
+                                <div class="metric-label">Mémoire (%)</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- État du système -->
+            <div class="col-md-6 col-lg-3 mb-4">
+                <div class="card h-100">
+                    <div class="card-header">
+                        <i class="fas fa-heartbeat me-2"></i>État du système
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-6 metric-card">
+                                <div class="big-number" id="activeRequests">0</div>
+                                <div class="metric-label">Demandes actives</div>
+                            </div>
+                            <div class="col-6 metric-card">
+                                <div class="big-number" id="loadImbalance">0.0</div>
+                                <div class="metric-label">Déséquilibre</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Graphiques et Événements -->
+        <div class="row">
+            <!-- Évolution des files d'attente -->
+            <div class="col-md-6 mb-4">
+                <div class="card h-100">
+                    <div class="card-header">
+                        <i class="fas fa-chart-line me-2"></i>Évolution des files d'attente
+                    </div>
+                    <div class="card-body">
+                        <canvas id="queueChart" height="250"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Utilisation des ressources -->
+            <div class="col-md-6 mb-4">
+                <div class="card h-100">
+                    <div class="card-header">
+                        <i class="fas fa-chart-area me-2"></i>Utilisation des ressources
+                    </div>
+                    <div class="card-body">
+                        <canvas id="resourceChart" height="250"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Journal des événements -->
+            <div class="col-md-6 mb-4">
+                <div class="card h-100">
+                    <div class="card-header">
+                        <i class="fas fa-history me-2"></i>Journal des événements
+                    </div>
+                    <div class="card-body event-box" id="eventsContainer">
+                        <div class="text-center text-muted py-5">
+                            <i class="fas fa-spinner fa-spin mb-3" style="font-size: 2rem;"></i>
+                            <p>Chargement des événements...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Alertes actives -->
+            <div class="col-md-6 mb-4">
+                <div class="card h-100">
+                    <div class="card-header">
+                        <i class="fas fa-exclamation-triangle me-2"></i>Alertes actives<span class="badge bg-danger ms-2" id="alertCount">0</span>
+                    </div>
+                    <div class="card-body" id="alertsContainer">
+                        <div class="alert alert-info">
+                            Aucune alerte active
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Utilisation par serveur et AWS -->
+        <div class="row">
+            <!-- Utilisation par serveur -->
+            <div class="col-md-6 mb-4">
+                <div class="card h-100">
+                    <div class="card-header">
+                        <i class="fas fa-server me-2"></i>Utilisation par serveur
+                    </div>
+                    <div class="card-body" id="serverMetricsContainer">
+                        <!-- Les métriques des serveurs seront injectées ici -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Simulation AWS Cloud -->
+            <div class="col-md-6 mb-4">
+                <div class="card h-100">
+                    <div class="card-header">
+                        <i class="fab fa-aws me-2"></i>Simulation AWS Cloud (Démonstration)
+                    </div>
+                    <div class="card-body">
+                        <div class="row mb-4">
+                            <div class="col-6">
+                                <h6 class="mb-3">Instances EC2</h6>
+                                <div class="big-number mb-1" id="awsInstancesCount">--</div>
+                                <div class="metric-label">Instances en cours d'exécution</div>
+                                <div id="awsInstancesList" class="mt-3 small">
+                                    <div class="text-muted">Chargement...</div>
+                                </div>
+                            </div>
+                            <div class="col-6">
+                                <h6 class="mb-3">Auto Scaling Groups</h6>
+                                <div class="big-number mb-1" id="awsAsgCount">--</div>
+                                <div class="metric-label">Groupes actifs</div>
+                                <div id="awsAsgList" class="mt-3 small">
+                                    <div class="text-muted">Chargement...</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-6">
+                                <h6 class="mb-3">Coûts Estimés</h6>
+                                <div class="d-flex align-items-baseline">
+                                    <span class="h3 me-1">$</span>
+                                    <div class="big-number" id="awsCost">0.00</div>
+                                </div>
+                                <div class="metric-label">Coût total cumulé</div>
+                                <div class="small text-muted mt-1">Projection mensuelle:
+                                    <span class="fw-bold">$<span id="awsMonthlyCost">0.00</span></span>
+                                </div>
+                            </div>
+                            <div class="col-6">
+                                <h6 class="mb-3">Activité</h6>
+                                <div class="big-number mb-1" id="awsUptime">0m</div>
+                                <div class="metric-label">Temps de fonctionnement</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.1.3/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.7.0/chart.min.js"></script>
+    <script>
+        // Initialisation des graphiques
+        // Graphique des files d'attente
+        const queueCtx = document.getElementById('queueChart').getContext('2d');
+        const queueChart = new Chart(queueCtx, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [
+                    {
+                        label: 'File VIP',
+                        data: [],
+                        borderColor: 'rgba(220, 53, 69, 1)',
+                        backgroundColor: 'rgba(220, 53, 69, 0.1)',
+                        borderWidth: 2,
+                        tension: 0.4,
+                        fill: true
+                    },
+                    {
+                        label: 'File Standard',
+                        data: [],
+                        borderColor: 'rgba(13, 110, 253, 1)',
+                        backgroundColor: 'rgba(13, 110, 253, 0.1)',
+                        borderWidth: 2,
+                        tension: 0.4,
+                        fill: true
+                    }
+                ]
+            },
+// Dans les options du graphique des files d'attente
+options: {
+    animation: {
+        duration: 300  // Animation plus rapide
+    },
+    scales: {
+        y: {
+            beginAtZero: true,
+            suggestedMax: 10,  // Limite supérieure suggérée
+            title: {
+                display: true,
+                text: 'Nombre de demandes'
+            }
+        },
+        x: {
+            title: {
+                display: true,
+                text: 'Temps'
+            }
+        }
+    },
+    plugins: {
+        legend: {
+            position: 'top',
+        }
+    },
+    responsive: true,
+    maintainAspectRatio: false
+}
+        });
+
+        // Graphique des ressources
+        const resourceCtx = document.getElementById('resourceChart').getContext('2d');
+        const resourceChart = new Chart(resourceCtx, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [
+                    {
+                        label: 'CPU',
+                        data: [],
+                        borderColor: 'rgba(40, 167, 69, 1)',
+                        backgroundColor: 'rgba(40, 167, 69, 0.1)',
+                        borderWidth: 2,
+                        tension: 0.4,
+                        fill: true
+                    },
+                    {
+                        label: 'Mémoire',
+                        data: [],
+                        borderColor: 'rgba(255, 193, 7, 1)',
+                        backgroundColor: 'rgba(255, 193, 7, 0.1)',
+                        borderWidth: 2,
+                        tension: 0.4,
+                        fill: true
+                    }
+                ]
+            },
+            options: {
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        title: {
+                            display: true,
+                            text: 'Utilisation (%)'
+                        }
+                    },
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Temps'
+                        }
+                    }
+                },
+                plugins: {
+                    legend: {
+                        position: 'top',
+                    }
+                },
+                responsive: true,
+                maintainAspectRatio: false
+            }
+        });
+
+        // Fonction pour mettre à jour l'heure de dernière mise à jour
+        function updateLastUpdate() {
+            const now = new Date();
+            document.getElementById('lastUpdate').innerText = now.toLocaleTimeString();
+        }
+
+// Fonction pour mettre à jour les métriques
+function updateMetrics() {
+    fetch('/api/metrics')
+        .then(response => response.json())
+        .then(data => {
+            console.log("Métriques reçues:", data);
+
+            // Mettre à jour les tailles de files d'attente
+            document.getElementById('vipQueueSize').innerText = data.queue_sizes?.vip || 0;
+            document.getElementById('standardQueueSize').innerText = data.queue_sizes?.standard || 0;
+
+            // Mettre à jour les métriques normalisées
+            if (data.normalized) {
+                document.getElementById('cpuUsage').innerText = data.normalized.cpu_percentage || 0;
+                document.getElementById('memoryUsage').innerText = data.normalized.memory_percentage || 0;
+            }
+
+            // Mettre à jour les temps d'attente
+            if (data.wait_times) {
+                document.getElementById('vipWaitTime').innerText =
+                    (data.wait_times.vip || 0).toFixed(1);
+                document.getElementById('standardWaitTime').innerText =
+                    (data.wait_times.standard || 0).toFixed(1);
+
+                console.log("Temps d'attente mis à jour:", data.wait_times);
+            } else {
+                console.log("Aucune donnée de temps d'attente reçue");
+            }
+
+            // Mettre à jour le nombre de demandes actives
+            // Utiliser la valeur réelle des demandes actives
+            document.getElementById('activeRequests').innerText = data.active_requests_count || 0;
+
+            // Mettre à jour le déséquilibre de charge
+            // Utiliser la valeur réelle du déséquilibre
+            document.getElementById('loadImbalance').innerText = data.load_imbalance ?
+                data.load_imbalance.toFixed(1) : "0.0";
+
+            // Mettre à jour les métriques des serveurs
+            updateServerMetrics(data.server_metrics || {});
+
+            updateLastUpdate();
+        })
+        .catch(error => console.error("Erreur lors de la récupération des métriques:", error));
+}
+
+        // Fonction pour mettre à jour les métriques des serveurs
+        function updateServerMetrics(serverMetrics) {
+            const container = document.getElementById('serverMetricsContainer');
+
+            if (Object.keys(serverMetrics).length === 0) {
+                container.innerHTML = '<div class="text-center text-muted py-3">Aucune donnée de serveur disponible</div>';
+                return;
+            }
+
+            let html = '';
+            for (const [serverId, metrics] of Object.entries(serverMetrics)) {
+                const cpuUsed = Math.min(100, metrics.cpu_used || 0); // Limiter à 100% pour l'affichage
+                const memoryUsed = Math.min(100, metrics.memory_used || 0); // Limiter à 100% pour l'affichage
+
+                // Conserver la vraie valeur pour le texte
+                const realCpuUsed = metrics.cpu_used || 0;
+                const realMemoryUsed = metrics.memory_used || 0;
+
+                const cpuClass = cpuUsed > 80 ? 'server-metric-critical' :
+                               cpuUsed > 60 ? 'server-metric-high' : '';
+                const memoryClass = memoryUsed > 80 ? 'server-metric-critical' :
+                                   memoryUsed > 60 ? 'server-metric-high' : '';
+
+                html += `
+                <div class="mb-3">
+                    <h6>${serverId}</h6>
+                    <div class="server-metric ${cpuClass}">
+                        <div class="d-flex justify-content-between">
+                            <span>CPU:</span>
+                            <span>${realCpuUsed.toFixed(1)}%</span>
+                        </div>
+                        <div class="progress" style="height: 5px;">
+                            <div class="progress-bar ${cpuUsed > 80 ? 'bg-danger' : cpuUsed > 60 ? 'bg-warning' : 'bg-success'}"
+                                 role="progressbar" style="width: ${cpuUsed}%;"
+                                 aria-valuenow="${cpuUsed}" aria-valuemin="0" aria-valuemax="100"></div>
+                        </div>
+                    </div>
+                    <div class="server-metric ${memoryClass} mt-2">
+                        <div class="d-flex justify-content-between">
+                            <span>Mémoire:</span>
+                            <span>${realMemoryUsed.toFixed(1)}%</span>
+                        </div>
+                        <div class="progress" style="height: 5px;">
+                            <div class="progress-bar ${memoryUsed > 80 ? 'bg-danger' : memoryUsed > 60 ? 'bg-warning' : 'bg-info'}"
+                                 role="progressbar" style="width: ${memoryUsed}%;"
+                                 aria-valuenow="${memoryUsed}" aria-valuemin="0" aria-valuemax="100"></div>
+                        </div>
+                    </div>
+                </div>`;
+            }
+
+            container.innerHTML = html;
+        }
+
+        // Fonction pour mettre à jour les graphiques
+// Fonction pour mettre à jour les graphiques
+function updateCharts() {
+    // Graphique des files d'attente
+    fetch('/api/queue_history')
+        .then(response => response.json())
+        .then(data => {
+            console.log("Queue history data:", data);
+
+            if (data.vip && data.vip.length > 0 && data.standard && data.standard.length > 0) {
+                // Limiter à 15 derniers points pour un affichage plus clair
+                let vipData = data.vip.slice(-15);
+                let stdData = data.standard.slice(-15);
+
+                const timestamps = vipData.map(item => new Date(item[0] * 1000).toLocaleTimeString());
+                const vipValues = vipData.map(item => item[1]);
+                const stdValues = stdData.map(item => item[1]);
+
+                queueChart.data.labels = timestamps;
+                queueChart.data.datasets[0].data = vipValues;
+                queueChart.data.datasets[1].data = stdValues;
+                queueChart.update();
+            }
+        })
+        .catch(error => console.error("Error updating queue chart:", error));
+
+    // Graphique des ressources
+    fetch('/api/resource_history')
+        .then(response => response.json())
+        .then(data => {
+            console.log("Resource history data:", data);
+
+            // Prendre les données du premier serveur (ou combiner plusieurs serveurs)
+            let cpuData = [];
+            let memoryData = [];
+            let timestamps = [];
+
+            // Trouver un serveur avec des données
+            for (const serverId in data) {
+                if (data[serverId] && data[serverId].length > 0) {
+                    // Utiliser ce serveur mais limiter à 15 derniers points
+                    const serverData = data[serverId].slice(-15);
+                    timestamps = serverData.map(item => new Date(item.timestamp * 1000).toLocaleTimeString());
+                    cpuData = serverData.map(item => item.cpu_used);
+                    memoryData = serverData.map(item => item.memory_used);
+                    break;
+                }
+            }
+
+            if (timestamps.length > 0) {
+                resourceChart.data.labels = timestamps;
+                resourceChart.data.datasets[0].data = cpuData;
+                resourceChart.data.datasets[1].data = memoryData;
+                resourceChart.update();
+            }
+        })
+        .catch(error => console.error("Error updating resource chart:", error));
+}
+
+        // Fonction pour mettre à jour les événements
+        function updateEvents() {
+            fetch('/api/events')
+                .then(response => response.json())
+                .then(events => {
+                    const container = document.getElementById('eventsContainer');
+
+                    if (!events || events.length === 0) {
+                        container.innerHTML = `
+                        <div class="text-center text-muted py-5">
+                            <p>Aucune activité récente</p>
+                        </div>`;
+                        return;
+                    }
+
+                    let html = '';
+                    // Trier les événements par timestamp (le plus récent en premier)
+                    const sortedEvents = Array.isArray(events) ?
+                        [...events].sort((a, b) => b.timestamp - a.timestamp) : [];
+
+                    for (const event of sortedEvents.slice(0, 15)) { // Limiter à 15 événements
+                        const date = new Date(event.timestamp * 1000);
+                        const formattedTime = date.toLocaleTimeString();
+
+                        let icon = 'info-circle';
+                        let color = 'primary';
+
+                        // Définir l'icône et la couleur en fonction du type d'événement
+                        switch (event.type) {
+                            case 'allocation':
+                                icon = 'plus-circle';
+                                color = 'success';
+                                break;
+                            case 'release':
+                                icon = 'minus-circle';
+                                color = 'secondary';
+                                break;
+                            case 'new_request':
+                                icon = 'inbox';
+                                color = 'primary';
+                                break;
+                            case 'completion':
+                                icon = 'check-circle';
+                                color = 'success';
+                                break;
+                            case 'dependency_wait':
+                                icon = 'hourglass-half';
+                                color = 'warning';
+                                break;
+                            case 'dependencies_satisfied':
+                                icon = 'unlock';
+                                color = 'info';
+                                break;
+                            case 'resource_shortage':
+                                icon = 'exclamation-triangle';
+                                color = 'warning';
+                                break;
+                            case 'overload':
+                                icon = 'fire';
+                                color = 'danger';
+                                break;
+                            case 'load_rebalance':
+                                icon = 'exchange-alt';
+                                color = 'info';
+                                break;
+                        }
+
+                        let message = '';
+                        // Construire le message en fonction du type d'événement
+                        switch (event.type) {
+                            case 'allocation':
+                                message = `Allocation de ressources pour ${event.request_id} sur ${event.server_id}`;
+                                break;
+                            case 'release':
+                                message = `Libération des ressources pour ${event.request_id}`;
+                                break;
+                            case 'new_request':
+                                message = `Nouvelle demande ${event.request_id} de type ${event.client_type}`;
+                                break;
+                            case 'completion':
+                                message = `Demande ${event.request_id} complétée`;
+                                break;
+                            case 'dependency_wait':
+                                message = `Demande ${event.request_id} en attente de dépendances`;
+                                break;
+                            case 'dependencies_satisfied':
+                                message = `Dépendances satisfaites pour ${event.request_id}`;
+                                break;
+                            case 'resource_shortage':
+                                message = `Ressources insuffisantes pour ${event.request_id}`;
+                                break;
+                            case 'overload':
+                                message = `Alerte de surcharge système`;
+                                break;
+                            case 'load_rebalance':
+                                message = `Rééquilibrage de charge effectué`;
+                                break;
+                            default:
+                                message = `Événement ${event.type}`;
+                        }
+
+                        html += `
+                        <div class="d-flex align-items-start mb-2 pb-2 border-bottom">
+                            <div class="me-3">
+                                <span class="fa-stack">
+                                    <i class="fas fa-circle fa-stack-2x text-${color}"></i>
+                                    <i class="fas fa-${icon} fa-stack-1x fa-inverse"></i>
+                                </span>
+                            </div>
+                            <div class="flex-grow-1">
+                                <div class="d-flex justify-content-between">
+                                    <strong>${message}</strong>
+                                    <small class="text-muted">${formattedTime}</small>
+                                </div>
+                                <div class="small text-muted">
+${event.server_id ? `Serveur: ${event.server_id}` : ''}
+                                </div>
+                            </div>
+                        </div>`;
+                    }
+
+                    container.innerHTML = html;
+                })
+                .catch(error => console.error("Erreur lors de la récupération des événements:", error));
+        }
+
+        // Fonction pour mettre à jour les alertes
+        function updateAlerts() {
+            fetch('/api/alerts')
+                .then(response => response.json())
+                .then(alerts => {
+                    const container = document.getElementById('alertsContainer');
+                    const countElement = document.getElementById('alertCount');
+
+                    if (!alerts || alerts.length === 0) {
+                        container.innerHTML = `
+                        <div class="alert alert-info">
+                            Aucune alerte active
+                        </div>`;
+                        countElement.innerText = '0';
+                        return;
+                    }
+
+                    countElement.innerText = alerts.length;
+
+                    let html = '';
+                    for (const alert of alerts) {
+                        const date = new Date(alert.timestamp * 1000);
+                        const formattedTime = date.toLocaleTimeString();
+
+                        const alertClass = alert.level === 'critical' ? 'alert-danger' :
+                                         alert.level === 'warning' ? 'alert-warning' : 'alert-info';
+
+                        html += `
+                        <div class="alert ${alertClass} d-flex align-items-center mb-2">
+                            <i class="fas fa-exclamation-triangle me-3"></i>
+                            <div class="flex-grow-1">
+                                <div class="d-flex justify-content-between">
+                                    <strong>${alert.message}</strong>
+                                    <small>${formattedTime}</small>
+                                </div>
+                                <div class="small">
+                                    ${alert.details ? JSON.stringify(alert.details) : ''}
+                                </div>
+                            </div>
+                        </div>`;
+                    }
+
+                    container.innerHTML = html;
+                })
+                .catch(error => console.error("Erreur lors de la récupération des alertes:", error));
+        }
+
+        // Fonction pour mettre à jour les informations AWS
+        function updateAWSSimulation() {
+            fetch('/api/aws_simulation')
+                .then(response => response.json())
+                .then(data => {
+                    console.log("Données AWS:", data);
+
+                    // Mettre à jour les instances
+                    const instances = data.instances || {};
+                    const runningInstances = Object.values(instances).filter(i => i.state === "running");
+                    document.getElementById('awsInstancesCount').innerText = runningInstances.length || "0";
+
+                    // Liste des instances
+                    const instancesList = document.getElementById('awsInstancesList');
+                    if (instancesList) {
+                        let instancesHtml = "";
+                        runningInstances.forEach(instance => {
+                            instancesHtml += `
+                                <div class="d-flex justify-content-between align-items-center mb-1 small">
+                                    <span>${instance.name}</span>
+                                    <span class="badge bg-success">Running</span>
+                                </div>
+                            `;
+                        });
+                        instancesList.innerHTML = instancesHtml || "<div class='text-muted'>Aucune instance active</div>";
+                    }
+
+                    // Auto Scaling Groups
+                    const asgs = data.auto_scaling_groups || {};
+                    const activeAsgs = Object.values(asgs).filter(asg => asg.state === "active");
+                    if (document.getElementById('awsAsgCount')) {
+                        document.getElementById('awsAsgCount').innerText = activeAsgs.length || "0";
+                    }
+
+                    // Liste des ASGs
+                    const asgList = document.getElementById('awsAsgList');
+                    if (asgList) {
+                        let asgHtml = "";
+                        activeAsgs.forEach(asg => {
+                            asgHtml += `
+                                <div class="d-flex justify-content-between align-items-center mb-1 small">
+                                    <span>${asg.name}</span>
+                                    <span>${(asg.instances || []).length}/${asg.desired_capacity || 0}</span>
+                                </div>
+                            `;
+                        });
+                        asgList.innerHTML = asgHtml || "<div class='text-muted'>Aucun ASG actif</div>";
+                    }
+
+                    // Coûts
+                    const totalCost = data.total_cost || 0;
+                    if (document.getElementById('awsCost')) {
+                        document.getElementById('awsCost').innerText = totalCost.toFixed(2);
+                    }
+                    if (document.getElementById('awsMonthlyCost')) {
+                        // Calculer le coût mensuel estimé
+                        const monthlyCost = totalCost * (30 * 24 * 60 * 60) / Math.max(1, data.uptime || 3600);
+                        document.getElementById('awsMonthlyCost').innerText = monthlyCost.toFixed(2);
+                    }
+
+                    // Uptime
+                    const uptime = data.uptime || 0;
+                    const uptimeHours = Math.floor(uptime / 3600);
+                    const uptimeMinutes = Math.floor((uptime % 3600) / 60);
+                    if (document.getElementById('awsUptime')) {
+                        document.getElementById('awsUptime').innerText = `${uptimeHours}h ${uptimeMinutes}m`;
+                    }
+                })
+                .catch(error => console.error("Erreur AWS:", error));
+        }
+
+        // Mettre à jour tout lors du chargement de la page
+        updateMetrics();
+        updateCharts();
+        updateEvents();
+        updateAlerts();
+        updateAWSSimulation();
+        updateLastUpdate();
+
+       // Rafraîchir les données moins fréquemment pour éviter trop de points
+        setInterval(updateMetrics, 5000);       // Toutes les 5 secondes
+        setInterval(updateCharts, 15000);       // Toutes les 15 secondes (au lieu de 10)
+        setInterval(updateEvents, 5000);        // Toutes les 5 secondes
+        setInterval(updateAlerts, 5000);        // Toutes les 5 secondes
+        setInterval(updateAWSSimulation, 30000); // Toutes les 30 secondes
+        setInterval(updateLastUpdate, 5000);    // Toutes les 5 secondes
+    </script>
+</body>
+</html>

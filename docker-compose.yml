@@ -1,0 +1,25 @@
+version: '3'
+
+services:
+  openfire:
+    image: quantumobject/openfire:latest
+    ports:
+      - "9090:9090"  # Interface d'administration
+      - "5222:5222"  # Communication XMPP standard
+      - "5223:5223"  # Communication XMPP sécurisée
+      - "5269:5269"  # Communication serveur-à-serveur
+      - "5275:5275"  # Connection Manager
+      - "5262:5262"  # Connection Manager
+      - "5263:5263"  # Connection Manager
+    volumes:
+      - openfire-data:/var/lib/openfire
+    networks:
+      - agent-network
+    restart: unless-stopped
+
+volumes:
+  openfire-data:
+
+networks:
+  agent-network:
+    driver: bridge
