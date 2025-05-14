@@ -1,0 +1,6 @@
+networkx~=3.2.1
+spade~=4.0.3
+aiohttp~=3.10.4
+self~=2020.12.3
+aioxmpp~=0.13.3
+flask~=3.1.1

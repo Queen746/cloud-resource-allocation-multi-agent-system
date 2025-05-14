@@ -9,6 +9,12 @@ import os
 import signal
 import sys
 from datetime import datetime
+<<<<<<< HEAD
+=======
+
+import self
+
+>>>>>>> b68335f (Premier commit)
 from tests.load_test import LoadTest
 from multiprocessing import Queue
 import threading
@@ -558,6 +564,87 @@ class SystemLauncher:
 
         return results
 
+<<<<<<< HEAD
+=======
+    self.completed_requests = set()  # Demandes terminées
+    self.failed_requests = {}  # {request_id: reason}
+    self.active_requests = set()  # Demandes en cours de traitement
+
+    # Ajouter à system_launcher.py
+
+    def submit_request(self, client, request_id, cpu_required, memory_required, estimated_duration, dependencies=None):
+        """
+        Soumet une nouvelle demande au système.
+        Utilisé par les tests de performance.
+
+        Args:
+            client (Client): Le client qui soumet la demande
+            request_id (str): Identifiant unique de la demande
+            cpu_required (float): Quantité de CPU requise
+            memory_required (float): Quantité de mémoire requise
+            estimated_duration (float): Durée estimée d'exécution (en secondes)
+            dependencies (set, optional): Ensemble des IDs de demandes dont dépend cette demande
+
+        Returns:
+            bool: True si la demande a été acceptée, False sinon
+        """
+        self.logger.info(f"Simulation: Envoi de la demande {request_id} du client {client.id} "
+                         f"(CPU: {cpu_required}, Mémoire: {memory_required}, Durée: {estimated_duration}s, "
+                         f"Dépendances: {dependencies})")
+
+        # Ajouter aux demandes actives (pour le suivi des tests)
+        self.active_requests.add(request_id)
+
+        # Simuler l'envoi de la demande au ClientManagerAgent
+        try:
+            # Si vous utilisez déjà la méthode ClientManagerAgent.add_request, appelez-la directement
+            self.client_manager.add_request(client, request_id, cpu_required, memory_required,
+                                            estimated_duration, dependencies)
+            return True
+        except Exception as e:
+            self.logger.error(f"Erreur lors de la soumission de la demande {request_id}: {e}")
+            self.failed_requests[request_id] = f"error_during_submission: {str(e)}"
+            return False
+
+    def get_completed_requests(self):
+        """
+        Retourne l'ensemble des demandes complétées depuis le dernier appel.
+        """
+        # Copier l'ensemble actuel pour le retourner
+        completed = self.completed_requests.copy()
+        # Vider l'ensemble pour le prochain appel
+        self.completed_requests.clear()
+        return completed
+
+    def get_failed_requests(self):
+        """
+        Retourne l'ensemble des demandes échouées.
+        """
+        return set(self.failed_requests.keys())
+
+    def get_failure_reason(self, request_id):
+        """
+        Retourne la raison de l'échec d'une demande.
+        """
+        return self.failed_requests.get(request_id, "unknown_failure")
+
+    def mark_request_completed(self, request_id):
+        """
+        Marque une demande comme complétée.
+        """
+        if request_id in self.active_requests:
+            self.active_requests.remove(request_id)
+            self.completed_requests.add(request_id)
+
+    def mark_request_failed(self, request_id, reason):
+        """
+        Marque une demande comme échouée.
+        """
+        if request_id in self.active_requests:
+            self.active_requests.remove(request_id)
+            self.failed_requests[request_id] = reason
+
+>>>>>>> b68335f (Premier commit)
 
 def parse_arguments():
     """
@@ -622,4 +709,8 @@ if __name__ == "__main__":
     success = asyncio.run(main())
 
     # Code de sortie
+<<<<<<< HEAD
     sys.exit(0 if success else 1)
+=======
+    sys.exit(0 if success else 1)
+>>>>>>> b68335f (Premier commit)

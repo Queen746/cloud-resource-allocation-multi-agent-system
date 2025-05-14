@@ -42,6 +42,14 @@ class ClientManagerAgent(Agent):
         self.standard_queue = []
         self.scheduler = None  # Sera initialisé dans setup()
 
+<<<<<<< HEAD
+=======
+        # Ajouter ces attributs
+        self.processing_requests = []  # Demandes en cours de traitement
+        self.waiting_dependencies = []  # Demandes en attente de dépendances
+        self.completed_requests = 0  # Compteur de demandes complétées
+
+>>>>>>> b68335f (Premier commit)
         # Dernier rapport sur les files d'attente
         self.last_queue_report = 0
 
@@ -291,6 +299,15 @@ class ClientManagerAgent(Agent):
                 self.logger.info(
                     f"Demande {request.id} retirée de la file standard (taille: {len(self.standard_queue)})")
 
+<<<<<<< HEAD
+=======
+    async def _update_queue_sizes(self):
+        """
+        Met à jour les tailles des files d'attente et notifie le MonitorAgent.
+        """
+        await self.notify_monitor_queue_update()
+
+>>>>>>> b68335f (Premier commit)
     async def notify_monitor_queue_update(self):
         """
         Envoie une mise à jour des files d'attente au MonitorAgent.
@@ -369,4 +386,158 @@ class ClientManagerAgent(Agent):
             async def run(self):
                 await self.agent.notify_monitor_queue_update()
 
+<<<<<<< HEAD
         self.add_behaviour(NotifyQueueUpdateBehaviour())
+=======
+        self.add_behaviour(NotifyQueueUpdateBehaviour())
+
+    async def on_request_completed(self, request_id, server_id):
+        """
+        Appelé lorsqu'une demande est complétée par le ResourceManagerAgent.
+
+        Args:
+            request_id (str): Identifiant de la demande
+            server_id (str): Identifiant du serveur où la demande a été traitée
+        """
+        self.logger.info(f"Demande {request_id} complétée sur {server_id}")
+
+        # Trouver la demande dans les listes de demandes actives/en attente
+        request_found = False
+
+        # Chercher d'abord dans les demandes en cours de traitement
+        for request in list(self.processing_requests):
+            if request.id == request_id:
+                self.processing_requests.remove(request)
+                request_found = True
+                break
+
+        # Si non trouvée, chercher dans les files d'attente VIP et standard
+        if not request_found:
+            for queue in [self.vip_queue, self.standard_queue]:
+                for request in list(queue):
+                    if request.id == request_id:
+                        queue.remove(request)
+                        request_found = True
+                        break
+                if request_found:
+                    break
+
+        # Si non trouvée, chercher dans les demandes en attente de dépendances
+        if not request_found:
+            for request in list(self.waiting_dependencies):
+                if request.id == request_id:
+                    self.waiting_dependencies.remove(request)
+                    request_found = True
+                    break
+
+        if request_found:
+            # Mettre à jour les statistiques
+            self.completed_requests += 1
+
+            # Notifier le client (simulation)
+            self.logger.info(f"Client {request.client.id} notifié de la complétion de la demande {request_id}")
+
+            # Vérifier si cette demande est une dépendance pour d'autres demandes
+            # et les déplacer vers la file d'attente appropriée si toutes leurs dépendances sont satisfaites
+            self._check_dependencies_satisfied(request_id)
+
+            # Mettre à jour les tailles des files d'attente
+            await self._update_queue_sizes()
+
+            # Notifier le MonitorAgent
+            await self._notify_monitor_completion(request_id, server_id)
+        else:
+            self.logger.warning(f"Demande {request_id} marquée comme complétée mais non trouvée dans les listes")
+
+        # Notifier le SystemLauncher que la demande est complétée (pour les tests de performance)
+        if hasattr(self, 'system_launcher') and self.system_launcher:
+            self.system_launcher.mark_request_completed(request_id)
+
+    async def _check_dependencies_satisfied(self, completed_request_id):
+        """
+        Vérifie si la complétion d'une demande satisfait les dépendances d'autres demandes.
+
+        Args:
+            completed_request_id (str): Identifiant de la demande complétée
+        """
+        # Parcourir les demandes en attente de dépendances
+        requests_to_move = []
+
+        for request in self.waiting_dependencies:
+            if completed_request_id in request.dependencies:
+                # Retirer la dépendance
+                request.dependencies.remove(completed_request_id)
+
+                # Si toutes les dépendances sont satisfaites, déplacer vers la file d'attente
+                if not request.dependencies:
+                    requests_to_move.append(request)
+
+                    # Notifier le MonitorAgent que les dépendances sont satisfaites
+                    await self._notify_monitor_dependencies_satisfied(request.id)
+
+        # Déplacer les demandes dont les dépendances sont satisfaites vers la file appropriée
+        for request in requests_to_move:
+            self.waiting_dependencies.remove(request)
+
+            # Déterminer la file d'attente appropriée
+            if request.client.is_vip():
+                self.vip_queue.append(request)
+                self.logger.info(f"Demande {request.id} déplacée vers la file VIP (dépendances satisfaites)")
+            else:
+                self.standard_queue.append(request)
+                self.logger.info(f"Demande {request.id} déplacée vers la file standard (dépendances satisfaites)")
+
+    async def _notify_monitor_completion(self, request_id, server_id):
+        """
+        Notifie le MonitorAgent de la complétion d'une demande.
+
+        Args:
+            request_id (str): Identifiant de la demande complétée
+            server_id (str): Identifiant du serveur où la demande a été traitée
+        """
+        if self.monitor_jid:
+            try:
+                # Créer le message
+                msg = Message(to=str(self.monitor_jid))
+                msg.set_metadata("type", "request_completed")
+
+                # Préparer le contenu
+                content = {
+                    "request_id": request_id,
+                    "server_id": server_id,
+                    "timestamp": time.time()
+                }
+
+                msg.body = json.dumps(content)
+
+                # Envoyer le message
+                await self.send(msg)
+            except Exception as e:
+                self.logger.error(f"Erreur lors de la notification du MonitorAgent: {e}")
+
+    async def _notify_monitor_dependencies_satisfied(self, request_id):
+        """
+        Notifie le MonitorAgent que toutes les dépendances d'une demande sont satisfaites.
+
+        Args:
+            request_id (str): Identifiant de la demande dont les dépendances sont satisfaites
+        """
+        if self.monitor_jid:
+            try:
+                # Créer le message
+                msg = Message(to=str(self.monitor_jid))
+                msg.set_metadata("type", "dependencies_satisfied")
+
+                # Préparer le contenu
+                content = {
+                    "request_id": request_id,
+                    "timestamp": time.time()
+                }
+
+                msg.body = json.dumps(content)
+
+                # Envoyer le message
+                await self.send(msg)
+            except Exception as e:
+                self.logger.error(f"Erreur lors de la notification du MonitorAgent: {e}")
+>>>>>>> b68335f (Premier commit)

@@ -470,4 +470,24 @@ class ResourceManagerAgent(Agent):
         """
         # La libération sera gérée par le comportement RequestCompletionBehaviour
         # qui vérifie régulièrement les demandes terminées
+<<<<<<< HEAD
         pass
+=======
+        pass
+
+    # Dans les méthodes pertinentes du ResourceManagerAgent
+
+    def on_allocation_failed(self, request_id, reason):
+        """
+        Appelé lorsqu'une allocation échoue.
+
+        Args:
+            request_id (str): Identifiant de la demande
+            reason (str): Raison de l'échec
+        """
+        self.logger.warning(f"Allocation échouée pour {request_id}: {reason}")
+
+        # Notifier le SystemLauncher
+        if hasattr(self, 'system_launcher') and self.system_launcher:
+            self.system_launcher.mark_request_failed(request_id, reason)
+>>>>>>> b68335f (Premier commit)
