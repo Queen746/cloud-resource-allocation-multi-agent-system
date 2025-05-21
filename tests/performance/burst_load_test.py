@@ -210,6 +210,10 @@ class BurstLoadTest:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         report_filename = f"logs/test_burst_load_{timestamp}.log"
 
+        # Valeurs par défaut pour les variables qui pourraient ne pas être définies
+        increase_factor = 1.0
+        during_success_rate = 1.0
+
         with open(report_filename, "w") as report_file:
             # En-tête du rapport
             report_file.write(f"=== Rapport de test de pic de charge ===\n")
@@ -224,16 +228,14 @@ class BurstLoadTest:
             total_failed = len(self.failed_requests)
 
             report_file.write(f"Demandes envoyées: {total_sent}\n")
-            report_file.write(f"Demandes complétées: {total_completed} ({total_completed / total_sent * 100:.2f}%)\n")
-            report_file.write(f"Demandes échouées: {total_failed} ({total_failed / total_sent * 100:.2f}%)\n")
+            report_file.write(f"Demandes complétées: {total_completed} ({total_completed / total_sent * 100:.2f}%)\n" if total_sent > 0 else f"Demandes complétées: {total_completed} (0.00%)\n")
+            report_file.write(f"Demandes échouées: {total_failed} ({total_failed / total_sent * 100:.2f}%)\n" if total_sent > 0 else f"Demandes échouées: {total_failed} (0.00%)\n")
             report_file.write(f"Demandes en attente: {total_sent - total_completed - total_failed}\n\n")
 
             # Analyse par phase
             report_file.write("=== Analyse par phase ===\n")
-
             for phase in ["pre_burst", "during_burst", "post_burst"]:
                 metrics = self.phase_metrics[phase]
-
                 if phase == "pre_burst":
                     phase_name = "Pré-pic (charge normale)"
                 elif phase == "during_burst":
@@ -283,48 +285,66 @@ class BurstLoadTest:
 
             # Analyse de l'impact du pic
             report_file.write("\n=== Impact du pic de charge ===\n")
-
             pre_burst_metrics = self.phase_metrics["pre_burst"]
             during_burst_metrics = self.phase_metrics["during_burst"]
             post_burst_metrics = self.phase_metrics["post_burst"]
 
-            # Temps de réponse avant, pendant et après le pic
-            if pre_burst_metrics["response_times"] and during_burst_metrics["response_times"] and post_burst_metrics[
-                "response_times"]:
+            # Calcul des temps de réponse moyens et taux de succès
+            pre_avg = 0
+            during_avg = 0
+            post_avg = 0
+
+            if pre_burst_metrics["response_times"]:
                 pre_avg = sum(pre_burst_metrics["response_times"]) / len(pre_burst_metrics["response_times"])
-                during_avg = sum(during_burst_metrics["response_times"]) / len(during_burst_metrics["response_times"])
-                post_avg = sum(post_burst_metrics["response_times"]) / len(post_burst_metrics["response_times"])
-
                 report_file.write(f"Temps de réponse moyen avant le pic: {pre_avg:.2f}s\n")
+            else:
+                report_file.write("Temps de réponse moyen avant le pic: N/A\n")
+
+            if during_burst_metrics["response_times"]:
+                during_avg = sum(during_burst_metrics["response_times"]) / len(during_burst_metrics["response_times"])
                 report_file.write(f"Temps de réponse moyen pendant le pic: {during_avg:.2f}s\n")
+            else:
+                report_file.write("Temps de réponse moyen pendant le pic: N/A\n")
+
+            if post_burst_metrics["response_times"]:
+                post_avg = sum(post_burst_metrics["response_times"]) / len(post_burst_metrics["response_times"])
                 report_file.write(f"Temps de réponse moyen après le pic: {post_avg:.2f}s\n\n")
+            else:
+                report_file.write("Temps de réponse moyen après le pic: N/A\n\n")
 
-                # Facteur d'augmentation pendant le pic
-                increase_factor = during_avg / pre_avg if pre_avg > 0 else float('inf')
+            # Facteur d'augmentation pendant le pic
+            if pre_avg > 0 and during_avg > 0:
+                increase_factor = during_avg / pre_avg
                 report_file.write(f"Facteur d'augmentation pendant le pic: {increase_factor:.2f}x\n")
+            else:
+                report_file.write("Facteur d'augmentation pendant le pic: N/A\n")
 
-                # Facteur de récupération après le pic
-                recovery_factor = post_avg / pre_avg if pre_avg > 0 else float('inf')
+            # Facteur de récupération après le pic
+            if pre_avg > 0 and post_avg > 0:
+                recovery_factor = post_avg / pre_avg
                 report_file.write(f"Facteur de récupération post-pic: {recovery_factor:.2f}x\n")
 
                 # Interprétation
                 if recovery_factor <= 1.2:  # Moins de 20% de différence
-                    report_file.write(
-                        "Récupération complète: Le système a retrouvé ses performances normales après le pic.\n")
+                    report_file.write("Récupération complète: Le système a retrouvé ses performances normales après le pic.\n")
                 elif recovery_factor <= 1.5:
-                    report_file.write(
-                        "Récupération partielle: Le système présente toujours un impact résiduel après le pic.\n")
+                    report_file.write("Récupération partielle: Le système présente toujours un impact résiduel après le pic.\n")
                 else:
-                    report_file.write(
-                        "Récupération difficile: Le système montre des signes de saturation persistante après le pic.\n")
+                    report_file.write("Récupération difficile: Le système montre des signes de saturation persistante après le pic.\n")
 
             # Taux de succès avant, pendant et après le pic
-            pre_success_rate = pre_burst_metrics["completed"] / pre_burst_metrics["sent"] if pre_burst_metrics[
-                                                                                                 "sent"] > 0 else 0
-            during_success_rate = during_burst_metrics["completed"] / during_burst_metrics["sent"] if \
-            during_burst_metrics["sent"] > 0 else 0
-            post_success_rate = post_burst_metrics["completed"] / post_burst_metrics["sent"] if post_burst_metrics[
-                                                                                                    "sent"] > 0 else 0
+            pre_success_rate = 0
+            during_success_rate = 0
+            post_success_rate = 0
+
+            if pre_burst_metrics["sent"] > 0:
+                pre_success_rate = pre_burst_metrics["completed"] / pre_burst_metrics["sent"]
+
+            if during_burst_metrics["sent"] > 0:
+                during_success_rate = during_burst_metrics["completed"] / during_burst_metrics["sent"]
+
+            if post_burst_metrics["sent"] > 0:
+                post_success_rate = post_burst_metrics["completed"] / post_burst_metrics["sent"]
 
             report_file.write(f"\nTaux de succès avant le pic: {pre_success_rate * 100:.2f}%\n")
             report_file.write(f"Taux de succès pendant le pic: {during_success_rate * 100:.2f}%\n")
@@ -332,8 +352,9 @@ class BurstLoadTest:
 
             # Conclusion et recommandations
             report_file.write("\n=== Conclusion et recommandations ===\n")
-
             impact_level = "faible"
+
+            # Détermination du niveau d'impact
             if increase_factor > 5 or during_success_rate < 0.7:
                 impact_level = "sévère"
             elif increase_factor > 2 or during_success_rate < 0.9:
@@ -341,19 +362,18 @@ class BurstLoadTest:
 
             report_file.write(f"Impact global du pic de charge: {impact_level}\n")
 
+            # Recommandations en fonction du niveau d'impact
             if impact_level == "faible":
                 report_file.write("Le système démontre une bonne résilience face aux pics de charge soudains.\n")
                 report_file.write("Recommandation: Maintenir la configuration actuelle.\n")
             elif impact_level == "modéré":
                 report_file.write("Le système subit un impact notable mais gérable lors des pics de charge.\n")
                 report_file.write("Recommandations:\n")
-                report_file.write(
-                    "1. Optimiser l'algorithme d'ordonnancement pour mieux prioriser en période de forte charge\n")
+                report_file.write("1. Optimiser l'algorithme d'ordonnancement pour mieux prioriser en période de forte charge\n")
                 report_file.write("2. Augmenter les ressources disponibles de 20% pour absorber les pics\n")
                 report_file.write("3. Mettre en place un mécanisme de limitation de débit adaptatif\n")
             else:
-                report_file.write(
-                    "Le système est fortement impacté par les pics de charge, avec une dégradation significative.\n")
+                report_file.write("Le système est fortement impacté par les pics de charge, avec une dégradation significative.\n")
                 report_file.write("Recommandations urgentes:\n")
                 report_file.write("1. Revoir l'architecture pour améliorer l'élasticité du système\n")
                 report_file.write("2. Implémenter un mécanisme de limitation des demandes en entrée\n")

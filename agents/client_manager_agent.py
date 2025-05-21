@@ -11,6 +11,7 @@ from spade.behaviour import CyclicBehaviour, PeriodicBehaviour, OneShotBehaviour
 from spade.message import Message
 from spade.template import Template
 
+import system_launcher
 from models.enums import ClientType, RequestStatus
 from algorithms.hrrn_scheduler import HRRNScheduler
 
@@ -42,19 +43,17 @@ class ClientManagerAgent(Agent):
         self.standard_queue = []
         self.scheduler = None  # Sera initialisé dans setup()
 
-<<<<<<< HEAD
-=======
         # Ajouter ces attributs
         self.processing_requests = []  # Demandes en cours de traitement
         self.waiting_dependencies = []  # Demandes en attente de dépendances
         self.completed_requests = 0  # Compteur de demandes complétées
 
->>>>>>> b68335f (Premier commit)
         # Dernier rapport sur les files d'attente
         self.last_queue_report = 0
 
         # Pour suivre les temps d'arrivée des demandes
         self.request_arrivals = {}
+        self.system_launcher = system_launcher  # Ajouter cette ligne
 
     class RequestQueueBehaviour(CyclicBehaviour):
         """
@@ -77,6 +76,8 @@ class ClientManagerAgent(Agent):
                     # Demander l'allocation des ressources au ResourceManagerAgent
                     message = Message(to=str(self.agent.resource_manager_jid))
                     message.set_metadata("type", "allocation_request")
+                    # Après avoir envoyé la demande au ResourceManagerAgent
+                    self.agent.logger.info(f"Demande d'allocation envoyée au ResourceManagerAgent pour {request_id}")
 
                     message_body = {
                         "request_id": next_request.id,
@@ -298,16 +299,12 @@ class ClientManagerAgent(Agent):
                 self.standard_queue.remove(request)
                 self.logger.info(
                     f"Demande {request.id} retirée de la file standard (taille: {len(self.standard_queue)})")
-
-<<<<<<< HEAD
-=======
     async def _update_queue_sizes(self):
         """
         Met à jour les tailles des files d'attente et notifie le MonitorAgent.
         """
         await self.notify_monitor_queue_update()
 
->>>>>>> b68335f (Premier commit)
     async def notify_monitor_queue_update(self):
         """
         Envoie une mise à jour des files d'attente au MonitorAgent.
@@ -386,11 +383,6 @@ class ClientManagerAgent(Agent):
             async def run(self):
                 await self.agent.notify_monitor_queue_update()
 
-<<<<<<< HEAD
-        self.add_behaviour(NotifyQueueUpdateBehaviour())
-=======
-        self.add_behaviour(NotifyQueueUpdateBehaviour())
-
     async def on_request_completed(self, request_id, server_id):
         """
         Appelé lorsqu'une demande est complétée par le ResourceManagerAgent.
@@ -403,10 +395,12 @@ class ClientManagerAgent(Agent):
 
         # Trouver la demande dans les listes de demandes actives/en attente
         request_found = False
+        found_request = None
 
         # Chercher d'abord dans les demandes en cours de traitement
         for request in list(self.processing_requests):
             if request.id == request_id:
+                found_request = request
                 self.processing_requests.remove(request)
                 request_found = True
                 break
@@ -416,6 +410,7 @@ class ClientManagerAgent(Agent):
             for queue in [self.vip_queue, self.standard_queue]:
                 for request in list(queue):
                     if request.id == request_id:
+                        found_request = request
                         queue.remove(request)
                         request_found = True
                         break
@@ -426,32 +421,35 @@ class ClientManagerAgent(Agent):
         if not request_found:
             for request in list(self.waiting_dependencies):
                 if request.id == request_id:
+                    found_request = request
                     self.waiting_dependencies.remove(request)
                     request_found = True
                     break
 
-        if request_found:
+        if request_found and found_request:
             # Mettre à jour les statistiques
             self.completed_requests += 1
 
             # Notifier le client (simulation)
-            self.logger.info(f"Client {request.client.id} notifié de la complétion de la demande {request_id}")
+            self.logger.info(f"Client {found_request.client.id} notifié de la complétion de la demande {request_id}")
 
             # Vérifier si cette demande est une dépendance pour d'autres demandes
             # et les déplacer vers la file d'attente appropriée si toutes leurs dépendances sont satisfaites
-            self._check_dependencies_satisfied(request_id)
+            await self._check_dependencies_satisfied(request_id)
 
             # Mettre à jour les tailles des files d'attente
             await self._update_queue_sizes()
 
             # Notifier le MonitorAgent
             await self._notify_monitor_completion(request_id, server_id)
+
+            # CORRECTION: Notifier le SystemLauncher
+            if hasattr(self, 'system_launcher') and self.system_launcher:
+                self.logger.info(
+                    f"[IMPORTANT] Marquer la demande {request_id} comme complétée dans SystemLauncher (CMA)")
+                self.system_launcher.mark_request_completed(request_id)
         else:
             self.logger.warning(f"Demande {request_id} marquée comme complétée mais non trouvée dans les listes")
-
-        # Notifier le SystemLauncher que la demande est complétée (pour les tests de performance)
-        if hasattr(self, 'system_launcher') and self.system_launcher:
-            self.system_launcher.mark_request_completed(request_id)
 
     async def _check_dependencies_satisfied(self, completed_request_id):
         """
@@ -540,4 +538,4 @@ class ClientManagerAgent(Agent):
                 await self.send(msg)
             except Exception as e:
                 self.logger.error(f"Erreur lors de la notification du MonitorAgent: {e}")
->>>>>>> b68335f (Premier commit)
+

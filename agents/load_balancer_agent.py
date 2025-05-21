@@ -10,6 +10,8 @@ from spade.behaviour import CyclicBehaviour, PeriodicBehaviour
 from spade.message import Message
 from spade.template import Template
 
+# Suppression de l'import problématique:
+# from timeago.locales.create_tests import content
 
 class LoadBalancerAgent(Agent):
     """
@@ -94,7 +96,7 @@ class LoadBalancerAgent(Agent):
                             f"Sélection de serveur pour {request_id}: CPU={cpu_required}, Mémoire={memory_required}")
 
                         # Sélectionner le serveur selon la stratégie actuelle
-                        selected_server = self.agent.select_server(cpu_required, memory_required)
+                        selected_server = self.agent.select_server(cpu_required, memory_required, request_id)
 
                         if selected_server:
                             self.agent.logger.info(f"Serveur sélectionné pour {request_id}: {selected_server}")
@@ -169,17 +171,22 @@ class LoadBalancerAgent(Agent):
         # Comportement pour la surveillance des charges (toutes les 30 secondes)
         self.add_behaviour(self.LoadMonitoringBehaviour(period=30))
 
-    def select_server(self, cpu_required, memory_required):
+    def select_server(self, cpu_required, memory_required, request_id=None):
         """
         Sélectionne un serveur pour une demande selon la stratégie actuelle.
 
         Args:
             cpu_required (float): Quantité de CPU requise
             memory_required (float): Quantité de mémoire requise
+            request_id (str, optional): ID de la demande pour les logs
 
         Returns:
             str: Identifiant du serveur sélectionné, ou None si aucun serveur disponible
         """
+        # Log pour le débogage
+        if request_id:
+            self.logger.info(f"Sélection de serveur pour demande {request_id}")
+
         # Filtrer les serveurs avec assez de capacité
         available_servers = []
         for server_id, capacity in self.server_capacities.items():
@@ -239,6 +246,9 @@ class LoadBalancerAgent(Agent):
                     best_server = server
 
             selected_server = best_server
+
+        if selected_server and request_id:
+            self.logger.info(f"Serveur {selected_server} sélectionné pour la demande {request_id}")
 
         return selected_server
 
@@ -353,8 +363,6 @@ class LoadBalancerAgent(Agent):
 
                 # Calcul de la pondération inverse à la charge
                 # Plus la charge est élevée, plus la pondération est faible
-                # Calcul de la pondération inverse à la charge
-                # Plus la charge est élevée, plus la pondération est faible
                 cpu_weight = max(0.1, 1.0 - (cpu_percentage / avg_cpu_percentage))
                 memory_weight = max(0.1, 1.0 - (memory_percentage / avg_memory_percentage))
 
@@ -364,32 +372,32 @@ class LoadBalancerAgent(Agent):
                 self.logger.info(f"Nouvelle pondération pour {server_id}: {self.server_weights[server_id]:.2f}")
 
                 # Passer à la stratégie pondérée pour utiliser ces nouvelles pondérations
-            old_strategy = self.strategy
-            self.strategy = "weighted"
-            self.logger.info(f"Stratégie changée de {old_strategy} à {self.strategy} pour rééquilibrage")
+                old_strategy = self.strategy
+                self.strategy = "weighted"
+                self.logger.info(f"Stratégie changée de {old_strategy} à {self.strategy} pour rééquilibrage")
 
-            # Notifier le MonitorAgent du rééquilibrage
-            monitor_msg = Message(to=str(self.monitor_jid))
-            monitor_msg.set_metadata("type", "load_rebalanced")
-            monitor_msg.body = json.dumps({
-                "timestamp": time.time(),
-                "server_loads": {s: {"cpu": l["cpu"], "memory": l["memory"]} for s, l in self.server_loads.items()},
-                "server_weights": self.server_weights,
-                "old_strategy": old_strategy,
-                "new_strategy": self.strategy
-            })
+                # Notifier le MonitorAgent du rééquilibrage
+                monitor_msg = Message(to=str(self.monitor_jid))
+                monitor_msg.set_metadata("type", "load_rebalanced")
+                monitor_msg.body = json.dumps({
+                    "timestamp": time.time(),
+                    "server_loads": {s: {"cpu": l["cpu"], "memory": l["memory"]} for s, l in self.server_loads.items()},
+                    "server_weights": self.server_weights,
+                    "old_strategy": old_strategy,
+                    "new_strategy": self.strategy
+                })
 
-            # Créer un comportement OneShot pour envoyer le message
-            class NotifyRebalanceBehaviour(CyclicBehaviour):
-                async def run(self):
-                    await self.send(monitor_msg)
-                    self.kill()
+                # Créer un comportement OneShot pour envoyer le message
+                class NotifyRebalanceBehaviour(CyclicBehaviour):
+                    async def run(self):
+                        await self.send(monitor_msg)
+                        self.kill()
 
-            behaviour = NotifyRebalanceBehaviour()
-            self.add_behaviour(behaviour)
+                behaviour = NotifyRebalanceBehaviour()
+                self.add_behaviour(behaviour)
 
-            # Après un certain temps, revenir à la stratégie initiale
-            await asyncio.sleep(300)  # 5 minutes
+                # Après un certain temps, revenir à la stratégie initiale
+                await asyncio.sleep(300)  # 5 minutes
 
-            self.strategy = old_strategy
-            self.logger.info(f"Retour à la stratégie initiale: {self.strategy}")
+                self.strategy = old_strategy
+                self.logger.info(f"Retour à la stratégie initiale: {self.strategy}")

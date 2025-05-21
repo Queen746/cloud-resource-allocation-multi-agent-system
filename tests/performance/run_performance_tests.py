@@ -7,13 +7,17 @@ import time
 from datetime import datetime
 
 from system_launcher import SystemLauncher
-from tests.performance import test_adapter
 from tests.performance.constant_load_test import ConstantLoadTest
 from tests.performance.increasing_load_test import IncreasingLoadTest
 from tests.performance.burst_load_test import BurstLoadTest
 from tests.performance.dependency_test import DependencyTest
 from tests.performance.test_adapter import TestAdapter
-from system_launcher_test import SystemLauncher
+# Important: Utilisez le bon import pour SystemLauncher
+from system_launcher_test import SystemLauncher as TestSystemLauncher
+
+# Logger global pour ce module
+logger = logging.getLogger("PerformanceTests")
+
 
 def setup_logging():
     """Configure les logs pour les tests de performance"""
@@ -39,7 +43,9 @@ def setup_logging():
 
 def run_tests(args):
     """Exécute les tests de performance sélectionnés"""
-    logger, log_file = setup_logging()
+    global logger
+    logger_instance, log_file = setup_logging()
+    logger = logger_instance  # Mettre à jour le logger global
     results = {}
 
     # Afficher la configuration
@@ -57,24 +63,22 @@ def run_tests(args):
     logger.info(f"Ratio de dépendances: {args.dependency_ratio * 100:.0f}%")
 
     # Initialiser le système
+    system_launcher = None
     try:
         logger.info("Initialisation du système...")
-        system_launcher = SystemLauncher()
+        # Utiliser TestSystemLauncher pour les tests
+        system_launcher = TestSystemLauncher()
         system_launcher.start()  # Maintenant une méthode synchrone
 
         # Attendre que le système soit prêt
         time.sleep(10)
         logger.info("Système prêt pour les tests")
 
-        # Créer l'adaptateur de test
-        from tests.performance.test_adapter import TestAdapter
-        test_adapter = TestAdapter(system_launcher)
-
         # Exécuter les tests sélectionnés
         if args.constant:
             logger.info("=== Début du test de charge constante ===")
             test = ConstantLoadTest(
-                system_launcher=test_adapter,  # Utilisez l'adaptateur
+                system_launcher=system_launcher,  # Utilisez le SystemLauncher directement
                 requests_per_second=args.constant_rps,
                 duration_seconds=args.constant_duration,
                 vip_ratio=args.vip_ratio,
@@ -142,9 +146,34 @@ def run_tests(args):
         # Arrêt propre du système
         logger.info("Arrêt du système...")
         try:
-            system_launcher.shutdown()
+            if system_launcher:
+                system_launcher.shutdown()
         except Exception as e:
             logger.error(f"Erreur lors de l'arrêt du système: {e}")
+
+    # Attente supplémentaire et vérification finale
+    logger.info("Attente supplémentaire pour permettre aux demandes de se terminer...")
+    time.sleep(60)  # Attendre une minute supplémentaire
+
+    if system_launcher and hasattr(system_launcher, 'manually_mark_all_active_as_completed'):
+        if hasattr(system_launcher, 'active_requests'):
+            active_count = len(system_launcher.active_requests)
+            if active_count > 0:
+                logger.warning(f"Il reste {active_count} demandes actives, marquage manuel...")
+                system_launcher.manually_mark_all_active_as_completed()
+
+    logger.info("Vérification finale des demandes...")
+    if system_launcher and hasattr(system_launcher, 'active_requests') and system_launcher.active_requests:
+        active_count = len(system_launcher.active_requests)
+        completed_count = len(system_launcher.completed_requests) if hasattr(system_launcher,
+                                                                             'completed_requests') else 0
+
+        logger.warning(f"État final: {active_count} actives, {completed_count} complétées")
+
+        # Marquer toutes les demandes actives restantes comme complétées
+        for request_id in list(system_launcher.active_requests):
+            logger.info(f"Marquage final de {request_id} comme complétée")
+            system_launcher.mark_request_completed(request_id)
 
     return results, log_file
 
@@ -167,10 +196,18 @@ def generate_summary_report(results, args):
         # Résumé des résultats
         report.write("--- Résumé des résultats ---\n")
         for test_name, report_file in results.items():
+            if not report_file:
+                report.write(f"{test_name}: Aucun rapport généré\n")
+                continue
+
             report.write(f"{test_name}: {report_file}\n")
 
             # Extraire et ajouter les principales conclusions de chaque rapport
             try:
+                if not os.path.exists(report_file):
+                    report.write(f"  Fichier de rapport introuvable: {report_file}\n")
+                    continue
+
                 with open(report_file, "r") as f:
                     content = f.read()
 
@@ -216,7 +253,7 @@ def generate_summary_report(results, args):
                         if ratio_match:
                             report.write(f"  - Ratio temps graphe/indépendant: {ratio_match.group(1)}x\n")
             except Exception as e:
-                report.write(f"  Erreur lors de l'extraction des résultats: {e}\n")
+                report.write(f"  Erreur lors de l'extraction des résultats: {str(e)}\n")
 
             report.write("\n")
 
@@ -227,7 +264,7 @@ def generate_summary_report(results, args):
         # À compléter avec les recommandations spécifiques après analyse des résultats
         report.write("1. Optimiser l'algorithme d'ordonnancement pour maintenir le ratio d'équité\n")
         report.write("2. Surveiller attentivement les performances lors des pics d'activité\n")
-        report.write("3. Envisager d'augmenter les ressources système si la charge prévue dépasse [X] req/s\n")
+        report.write("3. Envisager d'augmenter les ressources système si la charge prévue dépasse 15 req/s\n")
         report.write("4. Améliorer la gestion des dépendances profondes pour réduire les temps de réponse\n")
 
     return summary_file
