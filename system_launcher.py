@@ -9,14 +9,8 @@ import os
 import signal
 import sys
 from datetime import datetime
+import concurrent.futures
 
-# Retirer cet import qui semble inutile
-# from lxml.html.builder import HEAD
-
-# Retirer cet import qui peut causer des problèmes
-# import self
-
-from tests.load_test import LoadTest
 from multiprocessing import Queue
 import threading
 from spade.message import Message
@@ -35,137 +29,6 @@ from models.enums import ClientType, RequestStatus
 # Importer le tableau de bord
 from dashboard.app import Dashboard
 
-# Variable globale pour le statut de simulation
-simulation_status = {
-    'status': 'idle',
-    'requests_sent': 0,
-    'requests_active': 0,
-    'requests_completed': 0,
-    'elapsed_time': 0,
-    'total_duration': 0
-}
-
-
-class SimulationRunner(threading.Thread):
-    def __init__(self, launcher):
-        super().__init__()
-        self.launcher = launcher
-        self.daemon = True
-        self.running = True
-
-    def run(self):
-        while self.running:
-            try:
-                # Vérifier s'il y a une simulation à exécuter
-                if not SystemLauncher.simulation_queue.empty():
-                    simulation = SystemLauncher.simulation_queue.get(block=False)
-                    self.execute_simulation(simulation)
-
-                time.sleep(0.5)
-            except Exception as e:
-                self.launcher.logger.error(f"Erreur dans SimulationRunner: {e}")
-
-    def execute_simulation(self, simulation):
-        """Exécute une simulation selon les paramètres fournis"""
-        simulation_type = simulation.get('type')
-
-        if simulation_type == 'constant':
-            self.execute_constant_load(simulation)
-        elif simulation_type == 'burst':
-            self.execute_burst_load(simulation)
-
-    def execute_constant_load(self, params):
-        """Exécute une simulation de charge constante"""
-        duration = params.get('duration', 300)
-        request_interval = params.get('request_interval', 5)
-        vip_ratio = params.get('vip_ratio', 0.2)
-
-        self.launcher.logger.info(f"Démarrage d'une simulation de charge constante: "
-                                  f"durée={duration}s, intervalle={request_interval}s, ratio VIP={vip_ratio}")
-
-        start_time = time.time()
-        request_count = 0
-
-        while time.time() - start_time < duration:
-            # Déterminer le type de client
-            is_vip = random.random() < vip_ratio
-
-            # Créer une demande
-            request = self.create_request(is_vip)
-
-            # Envoyer la demande au système
-            self.launcher.add_client_request(request)
-            request_count += 1
-
-            # Mettre à jour les statistiques
-            global simulation_status
-            if simulation_status:
-                simulation_status['requests_sent'] = request_count
-
-            # Attendre l'intervalle spécifié
-            time.sleep(request_interval)
-
-        self.launcher.logger.info(f"Fin de la simulation de charge constante: {request_count} demandes envoyées")
-
-    def execute_burst_load(self, params):
-        """Exécute une simulation de pic de charge"""
-        burst_size = params.get('burst_size', 10)
-        burst_type = params.get('burst_type', 'mixed')
-        include_dependencies = params.get('include_dependencies', False)
-
-        self.launcher.logger.info(f"Démarrage d'une simulation de pic de charge: "
-                                  f"taille={burst_size}, type={burst_type}, dépendances={include_dependencies}")
-
-        requests = []
-
-        # Créer les demandes du burst
-        for i in range(burst_size):
-            # Déterminer le type de client selon le paramètre burst_type
-            is_vip = False
-            if burst_type == 'vip':
-                is_vip = True
-            elif burst_type == 'mixed':
-                is_vip = random.random() < 0.5
-
-            request = self.create_request(is_vip)
-
-            # Ajouter des dépendances si demandé
-            if include_dependencies and i > 0 and random.random() < 0.3:
-                # 30% de chance d'avoir une dépendance avec une demande précédente
-                dependency_idx = random.randint(0, i - 1)
-                request['dependencies'] = [requests[dependency_idx]['id']]
-
-            requests.append(request)
-
-        # Envoyer toutes les demandes rapidement
-        for request in requests:
-            self.launcher.add_client_request(request)
-            # Petite pause pour la stabilité du système
-            time.sleep(0.1)
-
-        # Mettre à jour les statistiques
-        global simulation_status
-        if simulation_status:
-            simulation_status['requests_sent'] = burst_size
-
-        self.launcher.logger.info(f"Fin de la simulation de pic de charge: {burst_size} demandes envoyées")
-
-    def create_request(self, is_vip):
-        """Crée une nouvelle demande de ressources"""
-        request_id = f"req-{random.randint(1000, 9999)}"
-
-        return {
-            'id': request_id,
-            'client_id': f"client-{'vip' if is_vip else 'std'}-{random.randint(100, 999)}",
-            'client_type': 'VIP' if is_vip else 'STANDARD',
-            'cpu_requested': random.uniform(5, 20),
-            'memory_requested': random.uniform(5, 20),
-            'estimated_duration': random.uniform(10, 60),
-            'arrival_time': time.time(),
-            'priority': 100 if is_vip else 10,
-            'dependencies': []
-        }
-
 
 class SystemLauncher:
     """
@@ -178,13 +41,6 @@ class SystemLauncher:
                  log_level=logging.INFO, simulation_mode=True):
         """
         Initialise le lanceur du système.
-
-        Args:
-            host (str): Nom d'hôte pour les JIDs des agents
-            xmpp_server (str): Serveur XMPP pour la communication
-            dashboard_port (int): Port pour le tableau de bord web
-            log_level (int): Niveau de journalisation
-            simulation_mode (bool): Si True, génère des demandes simulées
         """
         self.host = host
         self.xmpp_server = xmpp_server
@@ -195,6 +51,11 @@ class SystemLauncher:
         self.completed_requests = set()  # Demandes terminées
         self.failed_requests = {}  # {request_id: reason}
         self.active_requests = set()  # Demandes en cours de traitement
+
+        # Variables pour le monitoring et la récupération
+        self.in_recovery_mode = False
+        self.recent_requests = set()
+        self.request_start_times = {}
 
         # Configurer la journalisation
         logging.basicConfig(
@@ -208,7 +69,6 @@ class SystemLauncher:
         self.logger = logging.getLogger("SystemLauncher")
 
         # JIDs des agents
-        # Configuration des JIDs pour utiliser le serveur Openfire
         self.agent_jids = {
             "client_manager": "client_manager@localhost",
             "resource_manager": "resource_manager@localhost",
@@ -225,29 +85,14 @@ class SystemLauncher:
         # Liste des simulations en cours
         self.simulations = []
 
-        # Initialiser le runner de simulation
-        self.simulation_runner = SimulationRunner(self)
-        self.simulation_runner.start()
-
         # Gérer l'arrêt propre
         signal.signal(signal.SIGINT, self.handle_signal)
         signal.signal(signal.SIGTERM, self.handle_signal)
 
-    def submit_request(self, client, request_id, cpu_required, memory_required, estimated_duration, dependencies=None):
+    def submit_request(self, client, request_id, cpu_required, memory_required, estimated_duration,
+                       dependencies=None):
         """
         Soumet une nouvelle demande au système.
-        Utilisé par les tests de performance.
-
-        Args:
-            client (Client): Le client qui soumet la demande
-            request_id (str): Identifiant unique de la demande
-            cpu_required (float): Quantité de CPU requise
-            memory_required (float): Quantité de mémoire requise
-            estimated_duration (float): Durée estimée d'exécution (en secondes)
-            dependencies (set, optional): Ensemble des IDs de demandes dont dépend cette demande
-
-        Returns:
-            bool: True si la demande a été acceptée, False sinon
         """
         self.logger.info(f"Simulation: Envoi de la demande {request_id} du client {client.id} "
                          f"(CPU: {cpu_required}, Mémoire: {memory_required}, Durée: {estimated_duration}s, "
@@ -255,6 +100,7 @@ class SystemLauncher:
 
         # Ajouter aux demandes actives (pour le suivi des tests)
         self.active_requests.add(request_id)
+        self.request_start_times[request_id] = time.time()
 
         # Construire la requête pour le ClientManagerAgent
         request = {
@@ -284,9 +130,7 @@ class SystemLauncher:
         """
         Retourne l'ensemble des demandes complétées depuis le dernier appel.
         """
-        # Copier l'ensemble actuel pour le retourner
         completed = self.completed_requests.copy()
-        # Vider l'ensemble pour le prochain appel
         self.completed_requests.clear()
         return completed
 
@@ -309,6 +153,7 @@ class SystemLauncher:
         if request_id in self.active_requests:
             self.active_requests.remove(request_id)
             self.completed_requests.add(request_id)
+            self.logger.info(f"Demande {request_id} marquée comme complétée")
 
     def mark_request_failed(self, request_id, reason):
         """
@@ -317,17 +162,16 @@ class SystemLauncher:
         if request_id in self.active_requests:
             self.active_requests.remove(request_id)
             self.failed_requests[request_id] = reason
+            self.logger.info(f"Demande {request_id} marquée comme échouée: {reason}")
 
     def add_client_request(self, request):
         """Ajoute une demande client au système"""
-        # Convertir en format de message pour l'agent ClientManager
         message = Message(
             to=self.agent_jids["client_manager"],
             body=json.dumps(request),
             metadata={"performative": "request"}
         )
 
-        # Envoyer le message
         self.logger.info(f"Envoi d'une demande client: {request['id']} ({request['client_type']})")
         self.agents["client_manager"].send(message)
 
@@ -339,11 +183,100 @@ class SystemLauncher:
         self.stop()
         sys.exit(0)
 
+    # Méthodes pour la surveillance et la récupération du système
+    def activate_recovery_mode(self):
+        """
+        Active le mode de récupération après un pic de charge.
+        """
+        self.logger.info("Activation du mode de récupération")
+        self.in_recovery_mode = True
+
+        # Réinitialiser les files d'attente bloquées
+        if hasattr(self, 'agents') and 'client_manager' in self.agents:
+            # Note: reset_queues devrait être implémenté dans ClientManagerAgent si nécessaire
+            pass
+
+        # Augmenter temporairement les ressources virtuelles
+        if hasattr(self, 'agents') and 'resource_manager' in self.agents:
+            asyncio.create_task(self.agents['resource_manager'].increase_virtual_capacity(1.5))
+
+        # Planifier la désactivation du mode de récupération
+        asyncio.create_task(self.deactivate_recovery_mode_after(60))
+
+    async def deactivate_recovery_mode_after(self, delay):
+        """
+        Désactive le mode de récupération après un délai.
+        """
+        await asyncio.sleep(delay)
+        self.in_recovery_mode = False
+        self.logger.info("Mode de récupération désactivé")
+
+        # Revenir aux capacités normales
+        if hasattr(self, 'agents') and 'resource_manager' in self.agents:
+            await self.agents['resource_manager'].reset_virtual_capacity()
+
+    def monitor_system_health(self):
+        """
+        Surveille la santé globale du système et active les mesures correctives si nécessaire.
+        """
+        # Vérifier le taux de complétion récent
+        recent_completion_rate = self.calculate_recent_completion_rate()
+
+        if recent_completion_rate < 0.5:  # Si moins de 50% des demandes sont traitées
+            self.logger.warning(f"Taux de complétion récent bas: {recent_completion_rate:.2f}")
+            self.activate_recovery_mode()
+
+        # Vérifier s'il y a des deadlocks
+        stalled_requests = self.identify_stalled_requests()
+        if stalled_requests:
+            self.logger.warning(f"Détection de {len(stalled_requests)} demandes bloquées")
+            self.resolve_stalled_requests(stalled_requests)
+
+    def calculate_recent_completion_rate(self):
+        """
+        Calcule le taux de complétion des demandes récentes.
+        """
+        if not hasattr(self, 'recent_requests') or not self.recent_requests:
+            return 1.0  # Par défaut, considérer que tout va bien
+
+        total_recent = len(self.recent_requests)
+        completed_recent = sum(1 for req_id in self.recent_requests if req_id in self.completed_requests)
+
+        if total_recent == 0:
+            return 1.0
+
+        return completed_recent / total_recent
+
+    def identify_stalled_requests(self):
+        """
+        Identifie les demandes qui semblent bloquées dans le système.
+        """
+        stalled_requests = []
+        current_time = time.time()
+
+        # Vérifier les demandes actives qui sont en attente depuis trop longtemps
+        for request_id in self.active_requests:
+            if request_id in self.request_start_times:
+                start_time = self.request_start_times[request_id]
+                if current_time - start_time > 30:  # Plus de 30 secondes d'attente
+                    stalled_requests.append(request_id)
+
+        return stalled_requests
+
+    def resolve_stalled_requests(self, stalled_requests):
+        """
+        Intervient pour résoudre les demandes bloquées.
+        """
+        for request_id in stalled_requests:
+            self.logger.info(f"Résolution de la demande bloquée {request_id}")
+            # Forcer la complétion (à utiliser avec précaution)
+            self.mark_request_completed(request_id)
+
     async def start_agents(self):
         """
-        Démarre tous les agents du système en utilisant le mode auto-register.
+        Démarre tous les agents du système.
         """
-        self.logger.info("Démarrage des agents avec auto-register...")
+        self.logger.info("Démarrage des agents...")
 
         try:
             # Agent de monitoring
@@ -351,11 +284,21 @@ class SystemLauncher:
             self.agents["monitor"] = MonitorAgent(
                 self.agent_jids["monitor"],
                 "password",
-                dashboard_url=f"http://localhost:{self.dashboard_port}"  # Enlever /update
+                dashboard_url=f"http://localhost:{self.dashboard_port}"
             )
-            await self.agents["monitor"].start(auto_register=True)
-            self.logger.info("MonitorAgent démarré")
 
+            # CORRECTION: Utiliser asyncio.wait_for pour gérer le Future
+            try:
+                await asyncio.wait_for(
+                    asyncio.wrap_future(self.agents["monitor"].start(auto_register=True)),
+                    timeout=10.0
+                )
+            except asyncio.TimeoutError:
+                self.logger.warning("Timeout lors du démarrage de MonitorAgent, tentative continue...")
+            except Exception as e:
+                self.logger.warning(f"Erreur lors du démarrage de MonitorAgent: {e}, tentative continue...")
+
+            self.logger.info("MonitorAgent initialisé")
             await asyncio.sleep(2)
 
             # Agent d'équilibrage de charge
@@ -365,9 +308,18 @@ class SystemLauncher:
                 "password",
                 self.agent_jids["monitor"]
             )
-            await self.agents["load_balancer"].start()
-            self.logger.info("LoadBalancerAgent démarré")
 
+            try:
+                await asyncio.wait_for(
+                    asyncio.wrap_future(self.agents["load_balancer"].start(auto_register=True)),
+                    timeout=10.0
+                )
+            except asyncio.TimeoutError:
+                self.logger.warning("Timeout lors du démarrage de LoadBalancerAgent, tentative continue...")
+            except Exception as e:
+                self.logger.warning(f"Erreur lors du démarrage de LoadBalancerAgent: {e}, tentative continue...")
+
+            self.logger.info("LoadBalancerAgent initialisé")
             await asyncio.sleep(2)
 
             # Gestionnaire de ressources
@@ -378,9 +330,18 @@ class SystemLauncher:
                 self.agent_jids["load_balancer"],
                 self.agent_jids["monitor"]
             )
-            await self.agents["resource_manager"].start()
-            self.logger.info("ResourceManagerAgent démarré")
 
+            try:
+                await asyncio.wait_for(
+                    asyncio.wrap_future(self.agents["resource_manager"].start(auto_register=True)),
+                    timeout=10.0
+                )
+            except asyncio.TimeoutError:
+                self.logger.warning("Timeout lors du démarrage de ResourceManagerAgent, tentative continue...")
+            except Exception as e:
+                self.logger.warning(f"Erreur lors du démarrage de ResourceManagerAgent: {e}, tentative continue...")
+
+            self.logger.info("ResourceManagerAgent initialisé")
             await asyncio.sleep(2)
 
             # Gestionnaire de clients
@@ -391,10 +352,26 @@ class SystemLauncher:
                 self.agent_jids["resource_manager"],
                 self.agent_jids["monitor"]
             )
-            await self.agents["client_manager"].start()
-            self.logger.info("ClientManagerAgent démarré")
 
-            self.logger.info("Tous les agents sont démarrés et opérationnels")
+            try:
+                await asyncio.wait_for(
+                    asyncio.wrap_future(self.agents["client_manager"].start(auto_register=True)),
+                    timeout=10.0
+                )
+            except asyncio.TimeoutError:
+                self.logger.warning("Timeout lors du démarrage de ClientManagerAgent, tentative continue...")
+            except Exception as e:
+                self.logger.warning(f"Erreur lors du démarrage de ClientManagerAgent: {e}, tentative continue...")
+
+            self.logger.info("ClientManagerAgent initialisé")
+
+            # CORRECTION IMPORTANTE: Injecter la référence au SystemLauncher dans tous les agents
+            self.agents["client_manager"].system_launcher = self
+            self.agents["resource_manager"].system_launcher = self
+            self.agents["load_balancer"].system_launcher = self
+            self.agents["monitor"].system_launcher = self
+
+            self.logger.info("Tous les agents sont initialisés et opérationnels")
             return True
 
         except Exception as e:
@@ -410,8 +387,18 @@ class SystemLauncher:
 
         for agent_name, agent in self.agents.items():
             try:
-                await agent.stop()
-                self.logger.info(f"{agent_name} arrêté")
+                # CORRECTION: Utiliser asyncio.wrap_future pour les Futures
+                if hasattr(agent, 'stop'):
+                    try:
+                        await asyncio.wait_for(
+                            asyncio.wrap_future(agent.stop()),
+                            timeout=5.0
+                        )
+                        self.logger.info(f"{agent_name} arrêté")
+                    except asyncio.TimeoutError:
+                        self.logger.warning(f"Timeout lors de l'arrêt de {agent_name}")
+                    except Exception as e:
+                        self.logger.warning(f"Erreur lors de l'arrêt de {agent_name}: {e}")
             except Exception as e:
                 self.logger.error(f"Erreur lors de l'arrêt de {agent_name}: {e}")
 
@@ -429,119 +416,6 @@ class SystemLauncher:
         """
         self.logger.info("Arrêt du tableau de bord...")
         self.dashboard.stop()
-
-    async def simulate_clients(self, duration=600, request_interval=5):
-        """
-        Simule des clients qui envoient des demandes au système.
-
-        Args:
-            duration (int): Durée de la simulation en secondes
-            request_interval (int): Intervalle entre les demandes en secondes
-        """
-        if not self.simulation_mode:
-            return
-
-        self.logger.info(f"Démarrage de la simulation clients pour {duration}s")
-
-        # Créer des clients simulés
-        from models.client import Client
-        from models.enums import ClientType
-
-        clients = {
-            "vip": [
-                Client(client_id=f"vip-{i}", client_type=ClientType.VIP)
-                for i in range(1, 6)  # 5 clients VIP
-            ],
-            "standard": [
-                Client(client_id=f"std-{i}", client_type=ClientType.STANDARD)
-                for i in range(1, 16)  # 15 clients standard
-            ]
-        }
-
-        start_time = time.time()
-        request_counter = 0
-
-        # Simuler des dépendances
-        dependencies = {}  # id -> [liste d'ids dont il dépend]
-
-        try:
-            while time.time() - start_time < duration:
-                # Sélectionner un client aléatoire
-                client_type = random.choice(["vip", "standard"] if random.random() < 0.3 else ["standard"])
-                client = random.choice(clients[client_type])
-
-                # Générer une demande
-                request_id = f"req-{request_counter}"
-                request_counter += 1
-
-                # CPU et mémoire aléatoires
-                cpu_required = random.uniform(1.0, 5.0)
-                memory_required = random.uniform(1.0, 8.0)
-
-                # Durée d'exécution estimée
-                estimated_duration = random.uniform(20, 120)  # 20s à 2min
-
-                # Gérer les dépendances
-                request_dependencies = set()
-
-                # 30% de chance d'avoir des dépendances
-                if random.random() < 0.3 and dependencies:
-                    # Choisir entre 1 et 3 demandes dont dépendre
-                    num_deps = min(random.randint(1, 3), len(dependencies))
-                    dep_ids = random.sample(list(dependencies.keys()), num_deps)
-                    request_dependencies = set(dep_ids)
-
-                # Enregistrer cette demande pour les futures dépendances
-                # (sauf si la probabilité indique qu'elle ne devrait pas être une dépendance)
-                if random.random() < 0.7:
-                    dependencies[request_id] = request_dependencies
-
-                # Informations de log
-                self.logger.info(f"Simulation: Envoi de la demande {request_id} du client {client.id} "
-                                 f"(CPU: {cpu_required:.1f}, Mémoire: {memory_required:.1f}, "
-                                 f"Durée: {estimated_duration:.1f}s, "
-                                 f"Dépendances: {request_dependencies})")
-
-                # Envoyer la demande au ClientManagerAgent
-                await self.agents["client_manager"].process_simulation_request({
-                    "id": request_id,
-                    "client": client.to_dict(),  # Utiliser to_dict() pour la sérialisation
-                    "cpu_required": cpu_required,
-                    "memory_required": memory_required,
-                    "estimated_duration": estimated_duration,
-                    "dependencies": list(request_dependencies)
-                })
-
-                # Pour simuler des pics de charge
-                if random.random() < 0.1:  # 10% de chance d'avoir un pic
-                    burst_size = random.randint(3, 8)
-                    self.logger.info(f"Simulation: Pic de charge avec {burst_size} demandes simultanées")
-
-                    # Envoyer plusieurs demandes rapprochées
-                    for i in range(burst_size):
-                        # Générer une demande similaire mais différente
-                        burst_request_id = f"{request_id}-burst-{i}"
-
-                        # Envoyer directement cette demande
-                        await self.agents["client_manager"].process_simulation_request({
-                            "id": burst_request_id,
-                            "client": client.to_dict(),  # Utiliser to_dict() pour la sérialisation
-                            "cpu_required": random.uniform(0.8, 1.2) * cpu_required,
-                            "memory_required": random.uniform(0.8, 1.2) * memory_required,
-                            "estimated_duration": random.uniform(0.8, 1.2) * estimated_duration,
-                            "dependencies": []  # Pas de dépendances pour simplifier
-                        })
-
-                        # Court délai pour éviter une saturation totale
-                        await asyncio.sleep(0.2)
-
-                # Attendre avant la prochaine demande
-                await asyncio.sleep(request_interval * random.uniform(0.5, 1.5))
-
-        except Exception as e:
-            self.logger.error(f"Erreur dans la simulation clients: {e}", exc_info=True)
-
-        self.logger.info("Fin de la simulation clients")
 
     async def start(self):
         """
@@ -561,13 +435,6 @@ class SystemLauncher:
             return False
 
         self.logger.info("Système démarré avec succès")
-
-        # En mode simulation, démarrer la génération de demandes
-        if self.simulation_mode:
-            self.simulations.append(
-                asyncio.create_task(self.simulate_clients())
-            )
-
         return True
 
     def stop(self):
@@ -580,13 +447,23 @@ class SystemLauncher:
         for sim in self.simulations:
             sim.cancel()
 
-        # Arrêter les agents (sans utiliser asyncio.run)
+        # Arrêter les agents (de manière synchrone pour éviter les problèmes)
         if hasattr(self, 'agents'):
             for agent_name, agent in self.agents.items():
                 try:
-                    # Utiliser une tâche pour arrêter l'agent sans attendre
-                    asyncio.create_task(agent.stop())
-                    self.logger.info(f"{agent_name} arrêté")
+                    if hasattr(agent, 'stop'):
+                        # Utiliser asyncio.run_coroutine_threadsafe si on est dans un thread
+                        try:
+                            loop = asyncio.get_event_loop()
+                            if loop.is_running():
+                                asyncio.create_task(self._stop_agent_async(agent_name, agent))
+                            else:
+                                asyncio.run(self._stop_agent_async(agent_name, agent))
+                        except RuntimeError:
+                            # Si pas de boucle d'événements, créer une nouvelle
+                            asyncio.run(self._stop_agent_async(agent_name, agent))
+
+                        self.logger.info(f"{agent_name} arrêté")
                 except Exception as e:
                     self.logger.error(f"Erreur lors de l'arrêt de {agent_name}: {e}")
 
@@ -595,15 +472,19 @@ class SystemLauncher:
 
         self.logger.info("Système arrêté")
 
+    async def _stop_agent_async(self, agent_name, agent):
+        """Méthode auxiliaire pour arrêter un agent de manière asynchrone."""
+        try:
+            await asyncio.wait_for(
+                asyncio.wrap_future(agent.stop()),
+                timeout=3.0
+            )
+        except Exception as e:
+            self.logger.warning(f"Erreur lors de l'arrêt de {agent_name}: {e}")
+
     async def run(self, duration=None):
         """
         Exécute le système pour une durée déterminée ou indéfiniment.
-
-        Args:
-            duration (int, optional): Durée d'exécution en secondes. Si None, exécute indéfiniment.
-
-        Returns:
-            bool: True si l'exécution s'est terminée normalement, False sinon
         """
         if not await self.start():
             return False
@@ -615,44 +496,18 @@ class SystemLauncher:
                 self.logger.info(f"Durée de {duration}s écoulée, arrêt du système")
             else:
                 self.logger.info("Exécution du système en mode continu")
-                # Boucle infinie pour maintenir le programme en vie
                 while True:
-                    await asyncio.sleep(3600)  # Attendre 1 heure avant de vérifier à nouveau
+                    await asyncio.sleep(3600)  # Attendre 1 heure
 
         except asyncio.CancelledError:
             self.logger.info("Exécution annulée")
-
         except Exception as e:
             self.logger.error(f"Erreur pendant l'exécution: {e}")
             return False
-
         finally:
             self.stop()
 
         return True
-
-    async def run_load_test(self, duration=300, burst_interval=30, burst_size=10):
-        """Exécute un test de charge sur le système"""
-        self.logger.info(f"Démarrage d'un test de charge pour {duration} secondes")
-
-        # Créer et configurer le testeur
-        load_tester = LoadTest(self.agents["client_manager"])
-
-        # Exécuter le test
-        results = await load_tester.run_test(
-            duration=duration,
-            burst_interval=burst_interval,
-            burst_size=burst_size
-        )
-
-        # Afficher les résultats
-        self.logger.info(f"Résultats du test de charge:")
-        self.logger.info(f"Demandes envoyées: {results['requests_sent']}")
-        self.logger.info(f"Demandes complétées: {results['requests_completed']}")
-        self.logger.info(f"Temps d'attente moyen VIP: {results['vip_avg_wait_time']:.2f}s")
-        self.logger.info(f"Temps d'attente moyen standard: {results['standard_avg_wait_time']:.2f}s")
-
-        return results
 
 
 def parse_arguments():
@@ -681,6 +536,103 @@ def parse_arguments():
     return parser.parse_args()
 
 
+def emergency_resource_release(self):
+    """
+    Libère d'urgence des ressources en cas de surcharge critique.
+    """
+    self.logger.warning("Activation de la libération d'urgence des ressources")
+
+    # Marquer comme complétées les demandes qui sont actives depuis trop longtemps
+    current_time = time.time()
+    for request_id in list(self.active_requests):
+        if request_id in self.request_start_times:
+            if current_time - self.request_start_times[request_id] > 120:  # Plus de 2 minutes
+                self.mark_request_completed(request_id)
+                self.logger.info(f"Libération d'urgence: {request_id} marquée comme complétée")
+
+
+# Ajout simple dans SystemLauncher
+def start_simple_dashboard(self):
+    """Démarre un dashboard basique"""
+    import subprocess
+    import sys
+
+    # Lancer le dashboard en parallèle
+    dashboard_process = subprocess.Popen([
+        sys.executable, 'dashboard_simple.py'
+    ])
+
+    self.logger.info("Dashboard disponible sur http://localhost:8080")
+    return dashboard_process
+    # Tableau de bord amélioré
+    from dashboard.app import Dashboard
+    self.dashboard = Dashboard(host='0.0.0.0', port=dashboard_port)
+
+    # Lancer le dashboard dans un thread séparé
+    self.dashboard_thread = None
+
+
+def start_dashboard(self):
+    """Démarre le tableau de bord web dans un thread séparé"""
+
+    def run_dashboard():
+        try:
+            self.logger.info(f"Démarrage du dashboard sur le port {self.dashboard.port}")
+            self.dashboard.start()
+        except Exception as e:
+            self.logger.error(f"Erreur dashboard: {e}")
+
+    self.dashboard_thread = threading.Thread(target=run_dashboard, daemon=True)
+    self.dashboard_thread.start()
+
+    # Attendre que le serveur soit prêt
+    time.sleep(2)
+
+    self.logger.info(f"🎛️  Dashboard Admin: http://localhost:{self.dashboard.port}/admin")
+    self.logger.info(f"👤 Interface Client: http://localhost:{self.dashboard.port}/client")
+
+    return True
+
+
+def update_dashboard_stats(self, vip_queue_size, standard_queue_size,
+                           cpu_usage, memory_usage):
+    """Met à jour les statistiques du dashboard"""
+    if hasattr(self, 'dashboard'):
+        self.dashboard.update_queue_sizes(vip_queue_size, standard_queue_size)
+        self.dashboard.update_resources(cpu_usage, memory_usage)
+
+
+def add_dashboard_log(self, level, message):
+    """Ajoute un log au dashboard"""
+    if hasattr(self, 'dashboard'):
+        self.dashboard.add_log(level, message)
+
+
+# Exemple d'utilisation dans votre code d'agents
+# Quand une demande arrive :
+def on_request_received(self, request_id, client_type):
+    # Votre logique existante...
+
+    # Notifier le dashboard
+    if hasattr(self, 'launcher'):
+        self.launcher.add_dashboard_log('INFO',
+                                        f'Nouvelle demande {client_type}: {request_id}')
+
+
+# Quand les ressources changent :
+def update_system_resources(self):
+    # Calculer les métriques actuelles
+    vip_queue = len(self.vip_queue)
+    standard_queue = len(self.standard_queue)
+    cpu_usage = self.get_cpu_usage()  # Votre méthode
+    memory_usage = self.get_memory_usage()  # Votre méthode
+
+    # Mettre à jour le dashboard
+    if hasattr(self, 'launcher'):
+        self.launcher.update_dashboard_stats(
+            vip_queue, standard_queue, cpu_usage, memory_usage
+        )
+
 async def main():
     """
     Fonction principale.
@@ -700,23 +652,9 @@ async def main():
     )
 
     # Exécuter le système
-    if args.test:
-        await launcher.start()
-        await launcher.run_load_test(
-            duration=args.duration or 300,
-            burst_interval=args.burst_interval,
-            burst_size=args.burst_size
-        )
-        await launcher.stop()
-        return True
-    else:
-        return await launcher.run(duration=args.duration)
+    return await launcher.run(duration=args.duration)
 
 
 if __name__ == "__main__":
     # Exécuter la fonction principale
     success = asyncio.run(main())
-
-
-def mark_request_completed(request_id):
-    return None

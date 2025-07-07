@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mécanisme de Vieillissement Adaptatif</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .container {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            max-width: 900px;
+            width: 100%;
+        }
+
+        .title {
+            text-align: center;
+            color: #2c3e50;
+            margin-bottom: 10px;
+            font-size: 24px;
+            font-weight: bold;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #7f8c8d;
+            margin-bottom: 20px;
+            font-size: 16px;
+        }
+
+        .formula-box {
+            background: #f8f9fa;
+            border: 2px solid #e9ecef;
+            border-radius: 10px;
+            padding: 15px;
+            margin: 20px 0;
+            text-align: center;
+        }
+
+        .formula {
+            font-size: 18px;
+            font-weight: bold;
+            color: #2c3e50;
+            margin-bottom: 5px;
+        }
+
+        .formula-detail {
+            font-size: 14px;
+            color: #6c757d;
+        }
+
+        .chart-container {
+            position: relative;
+            height: 400px;
+            margin: 20px 0;
+        }
+
+        .key-insights {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        .insight-card {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 15px;
+            border-left: 5px solid #3498db;
+        }
+
+        .insight-title {
+            font-weight: bold;
+            color: #2c3e50;
+            margin-bottom: 5px;
+        }
+
+        .insight-text {
+            color: #6c757d;
+            font-size: 14px;
+        }
+
+        .legend-box {
+            display: flex;
+            justify-content: center;
+            gap: 30px;
+            margin: 15px 0;
+            flex-wrap: wrap;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-weight: 500;
+        }
+
+        .legend-color {
+            width: 20px;
+            height: 4px;
+            border-radius: 2px;
+        }
+
+        .vip-color { background: #e74c3c; }
+        .standard-color { background: #3498db; }
+        .convergence-color { background: #f39c12; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="title">Mécanisme de Vieillissement Adaptatif</div>
+        <div class="subtitle">Innovation 1 : Garantie Anti-Famine Mathématique</div>
+
+        <div class="formula-box">
+            <div class="formula">Priorité_Effective = Priorité_Base + (0.5 × Âge_secondes)</div>
+            <div class="formula-detail">VIP: Priorité_Base = 100 | Standard: Priorité_Base = 10 | Facteur_Vieillissement = 0.5</div>
+        </div>
+
+        <div class="legend-box">
+            <div class="legend-item">
+                <div class="legend-color vip-color"></div>
+                <span>Demande VIP (Priorité constante)</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color standard-color"></div>
+                <span>Demande Standard (Vieillissement)</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color convergence-color"></div>
+                <span>Point de convergence (180s)</span>
+            </div>
+        </div>
+
+        <div class="chart-container">
+            <canvas id="agingChart"></canvas>
+        </div>
+
+        <div class="key-insights">
+            <div class="insight-card">
+                <div class="insight-title">🎯 Garantie Anti-Famine</div>
+                <div class="insight-text">Après 180 secondes maximum, toute demande Standard atteint la priorité VIP, éliminant mathématiquement la famine.</div>
+            </div>
+            <div class="insight-card">
+                <div class="insight-title">⚖️ Équité Préservée</div>
+                <div class="insight-text">La différenciation commerciale VIP est maintenue sur les 3 premières minutes, période critique pour l'expérience client.</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Génération des données pour le graphique
+        const timePoints = [];
+        const vipPriority = [];
+        const standardPriority = [];
+
+        for (let t = 0; t <= 300; t += 10) {
+            timePoints.push(t);
+            vipPriority.push(100); // Priorité VIP constante
+            standardPriority.push(10 + (0.5 * t)); // Vieillissement standard
+        }
+
+        const ctx = document.getElementById('agingChart').getContext('2d');
+        const chart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: timePoints,
+                datasets: [
+                    {
+                        label: 'Demande VIP',
+                        data: vipPriority,
+                        borderColor: '#e74c3c',
+                        backgroundColor: 'rgba(231, 76, 60, 0.1)',
+                        borderWidth: 4,
+                        pointRadius: 0,
+                        tension: 0
+                    },
+                    {
+                        label: 'Demande Standard',
+                        data: standardPriority,
+                        borderColor: '#3498db',
+                        backgroundColor: 'rgba(52, 152, 219, 0.1)',
+                        borderWidth: 4,
+                        pointRadius: 0,
+                        tension: 0
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    title: {
+                        display: true,
+                        text: 'Évolution des Priorités dans le Temps',
+                        font: {
+                            size: 16,
+                            weight: 'bold'
+                        },
+                        color: '#2c3e50'
+                    },
+                    legend: {
+                        display: false
+                    },
+                    tooltip: {
+                        mode: 'index',
+                        intersect: false,
+                        callbacks: {
+                            title: function(context) {
+                                return `Temps: ${context[0].label} secondes`;
+                            },
+                            label: function(context) {
+                                return `${context.dataset.label}: ${context.parsed.y.toFixed(1)}`;
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Temps (secondes)',
+                            font: {
+                                size: 14,
+                                weight: 'bold'
+                            },
+                            color: '#2c3e50'
+                        },
+                        grid: {
+                            color: 'rgba(0,0,0,0.1)'
+                        }
+                    },
+                    y: {
+                        title: {
+                            display: true,
+                            text: 'Priorité Effective',
+                            font: {
+                                size: 14,
+                                weight: 'bold'
+                            },
+                            color: '#2c3e50'
+                        },
+                        min: 0,
+                        max: 200,
+                        grid: {
+                            color: 'rgba(0,0,0,0.1)'
+                        }
+                    }
+                },
+                interaction: {
+                    intersect: false,
+                    mode: 'index'
+                },
+                animation: {
+                    duration: 2000,
+                    easing: 'easeOutQuart'
+                }
+            },
+            plugins: [{
+                afterDraw: function(chart) {
+                    const ctx = chart.ctx;
+                    const yAxis = chart.scales.y;
+                    const xAxis = chart.scales.x;
+
+                    // Ligne verticale à 180 secondes
+                    const x180 = xAxis.getPixelForValue(180);
+                    ctx.save();
+                    ctx.strokeStyle = '#f39c12';
+                    ctx.lineWidth = 3;
+                    ctx.setLineDash([10, 5]);
+                    ctx.beginPath();
+                    ctx.moveTo(x180, yAxis.top);
+                    ctx.lineTo(x180, yAxis.bottom);
+                    ctx.stroke();
+
+                    // Point de convergence
+                    const y100 = yAxis.getPixelForValue(100);
+                    ctx.fillStyle = '#f39c12';
+                    ctx.beginPath();
+                    ctx.arc(x180, y100, 8, 0, 2 * Math.PI);
+                    ctx.fill();
+
+                    // Annotation
+                    ctx.fillStyle = '#2c3e50';
+                    ctx.font = 'bold 12px Arial';
+                    ctx.textAlign = 'center';
+                    ctx.fillText('Convergence', x180, yAxis.top - 10);
+                    ctx.fillText('180s', x180, yAxis.top - 25);
+
+                    ctx.restore();
+                }
+            }]
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,122 @@
+{
+  "test_type": "scalability",
+  "scenario_name": "Test de Scalabilit\u00e9",
+  "timestamp": "2025-06-16T03:13:38.835834",
+  "configuration": {
+    "test_volumes": [
+      100,
+      250,
+      500,
+      750,
+      1000
+    ],
+    "vip_ratio": 0.2,
+    "aging_factor": 0.7,
+    "total_test_time": 183.89762783050537
+  },
+  "results": [
+    {
+      "volume": 100,
+      "success_rate": 1.0,
+      "avg_response_time": 4.090521383285522,
+      "throughput": 11.444503542504723,
+      "total_time": 8.737818956375122,
+      "processing_time": 8.736804008483887,
+      "generation_time": 0.0010149478912353516,
+      "deadlocks_detected": 0,
+      "requests_with_dependencies": 23,
+      "dependency_resolution_efficiency": 1.0
+    },
+    {
+      "volume": 250,
+      "success_rate": 1.0,
+      "avg_response_time": 8.69823943901062,
+      "throughput": 14.614787693816229,
+      "total_time": 17.105961799621582,
+      "processing_time": 17.103986263275146,
+      "generation_time": 0.001975536346435547,
+      "deadlocks_detected": 0,
+      "requests_with_dependencies": 54,
+      "dependency_resolution_efficiency": 1.0
+    },
+    {
+      "volume": 500,
+      "success_rate": 1.0,
+      "avg_response_time": 16.529653339862822,
+      "throughput": 15.13894282743972,
+      "total_time": 33.02740526199341,
+      "processing_time": 33.025391578674316,
+      "generation_time": 0.002013683319091797,
+      "deadlocks_detected": 0,
+      "requests_with_dependencies": 119,
+      "dependency_resolution_efficiency": 1.0
+    },
+    {
+      "volume": 750,
+      "success_rate": 1.0,
+      "avg_response_time": 24.411473253885905,
+      "throughput": 15.044295243930696,
+      "total_time": 49.85278391838074,
+      "processing_time": 49.84872078895569,
+      "generation_time": 0.004063129425048828,
+      "deadlocks_detected": 0,
+      "requests_with_dependencies": 173,
+      "dependency_resolution_efficiency": 1.0
+    },
+    {
+      "volume": 1000,
+      "success_rate": 1.0,
+      "avg_response_time": 32.29773662185669,
+      "throughput": 15.354819247997868,
+      "total_time": 65.12613296508789,
+      "processing_time": 65.12213277816772,
+      "generation_time": 0.004000186920166016,
+      "deadlocks_detected": 0,
+      "requests_with_dependencies": 260,
+      "dependency_resolution_efficiency": 1.0
+    }
+  ],
+  "analysis": {
+    "consistency": 1.0,
+    "max_throughput": 15.354819247997868,
+    "scalability_linear": false,
+    "performance_degradation": 6.895750589113173
+  },
+  "dependencies": {
+    "total_requests_with_deps": 629,
+    "total_deadlocks_detected": 0,
+    "dependency_resolution_efficiency": 1.0,
+    "topological_sort_effective": true
+  },
+  "anti_starvation": {
+    "aging_factor": 0.7,
+    "starvation_prevented": true,
+    "adaptive_aging_used": true,
+    "max_volume_success_rate": 1.0
+  },
+  "metrics": {
+    "requests_sent": 2600,
+    "requests_completed": 2600,
+    "success_rates": [
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0
+    ],
+    "response_times": [
+      4.090521383285522,
+      8.69823943901062,
+      16.529653339862822,
+      24.411473253885905,
+      32.29773662185669
+    ],
+    "throughputs": [
+      11.444503542504723,
+      14.614787693816229,
+      15.13894282743972,
+      15.044295243930696,
+      15.354819247997868
+    ]
+  }
+}

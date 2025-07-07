@@ -1,0 +1,681 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - Système Multi-Agents Cloud</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
+        }
+
+        .header {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            padding: 1rem 2rem;
+            box-shadow: 0 2px 20px rgba(0,0,0,0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .header h1 {
+            color: #4a5568;
+            font-size: 1.8rem;
+            font-weight: 700;
+        }
+
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 1rem;
+            background: #10b981;
+            color: white;
+            border-radius: 25px;
+            font-weight: 600;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            background: #34d399;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .container {
+            padding: 2rem;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .card {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 1.5rem;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 12px 40px rgba(0,0,0,0.15);
+        }
+
+        .card-header {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            margin-bottom: 1rem;
+        }
+
+        .card-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+            color: white;
+            font-weight: bold;
+        }
+
+        .icon-agents { background: linear-gradient(135deg, #4f46e5, #7c3aed); }
+        .icon-queue { background: linear-gradient(135deg, #0891b2, #0369a1); }
+        .icon-resources { background: linear-gradient(135deg, #059669, #047857); }
+        .icon-performance { background: linear-gradient(135deg, #dc2626, #b91c1c); }
+
+        .card-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: #374151;
+        }
+
+        .metric-value {
+            font-size: 2rem;
+            font-weight: 700;
+            color: #1f2937;
+            margin: 0.5rem 0;
+        }
+
+        .metric-change {
+            font-size: 0.875rem;
+            font-weight: 500;
+        }
+
+        .metric-up { color: #059669; }
+        .metric-down { color: #dc2626; }
+        .metric-stable { color: #6b7280; }
+
+        .agents-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+
+        .agent-status {
+            padding: 0.75rem;
+            border-radius: 10px;
+            background: #f8fafc;
+            border-left: 4px solid;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .agent-online { border-left-color: #10b981; }
+        .agent-offline { border-left-color: #ef4444; }
+
+        .agent-name {
+            font-weight: 600;
+            color: #374151;
+        }
+
+        .agent-indicator {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+        }
+
+        .queue-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.75rem;
+            margin: 0.5rem 0;
+            background: #f8fafc;
+            border-radius: 8px;
+            border-left: 4px solid;
+        }
+
+        .queue-vip { border-left-color: #f59e0b; }
+        .queue-standard { border-left-color: #6b7280; }
+
+        .chart-container {
+            position: relative;
+            height: 300px;
+            margin-top: 1rem;
+        }
+
+        .large-card {
+            grid-column: 1 / -1;
+        }
+
+        .tabs {
+            display: flex;
+            border-bottom: 2px solid #e5e7eb;
+            margin-bottom: 1rem;
+        }
+
+        .tab {
+            padding: 0.75rem 1.5rem;
+            cursor: pointer;
+            border: none;
+            background: none;
+            font-weight: 600;
+            color: #6b7280;
+            transition: all 0.3s ease;
+        }
+
+        .tab.active {
+            color: #4f46e5;
+            border-bottom: 2px solid #4f46e5;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .logs {
+            max-height: 300px;
+            overflow-y: auto;
+            background: #1f2937;
+            color: #f9fafb;
+            padding: 1rem;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.875rem;
+        }
+
+        .log-entry {
+            margin-bottom: 0.5rem;
+            padding: 0.25rem;
+            border-radius: 4px;
+        }
+
+        .log-info { background: rgba(59, 130, 246, 0.2); }
+        .log-success { background: rgba(16, 185, 129, 0.2); }
+        .log-warning { background: rgba(245, 158, 11, 0.2); }
+        .log-error { background: rgba(239, 68, 68, 0.2); }
+
+        .controls {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .btn {
+            padding: 0.75rem 1.5rem;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #4f46e5, #7c3aed);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(79, 70, 229, 0.4);
+        }
+
+        .btn-secondary {
+            background: #e5e7eb;
+            color: #374151;
+        }
+
+        .btn-secondary:hover {
+            background: #d1d5db;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🌥️ Dashboard Système Multi-Agents Cloud</h1>
+        <div class="status-indicator">
+            <div class="status-dot"></div>
+            Système Opérationnel
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="controls">
+            <button class="btn btn-primary" onclick="startSimulation()">🚀 Lancer Simulation</button>
+            <button class="btn btn-secondary" onclick="stopSimulation()">⏹️ Arrêter</button>
+            <button class="btn btn-secondary" onclick="resetMetrics()">🔄 Reset</button>
+        </div>
+
+        <div class="grid">
+            <!-- Statut des Agents -->
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-icon icon-agents">🤖</div>
+                    <h3 class="card-title">Agents Multi-Agents</h3>
+                </div>
+                <div class="agents-grid">
+                    <div class="agent-status agent-online">
+                        <span class="agent-name">ClientManager</span>
+                        <div class="agent-indicator" style="background: #10b981;"></div>
+                    </div>
+                    <div class="agent-status agent-online">
+                        <span class="agent-name">ResourceManager</span>
+                        <div class="agent-indicator" style="background: #10b981;"></div>
+                    </div>
+                    <div class="agent-status agent-online">
+                        <span class="agent-name">LoadBalancer</span>
+                        <div class="agent-indicator" style="background: #10b981;"></div>
+                    </div>
+                    <div class="agent-status agent-online">
+                        <span class="agent-name">Monitor</span>
+                        <div class="agent-indicator" style="background: #10b981;"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Files d'attente -->
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-icon icon-queue">📋</div>
+                    <h3 class="card-title">Files d'Attente</h3>
+                </div>
+                <div class="queue-item queue-vip">
+                    <span>🌟 VIP Queue</span>
+                    <span id="vip-queue-size">0</span>
+                </div>
+                <div class="queue-item queue-standard">
+                    <span>👤 Standard Queue</span>
+                    <span id="standard-queue-size">0</span>
+                </div>
+                <div style="margin-top: 1rem;">
+                    <div style="font-size: 0.875rem; color: #6b7280; margin-bottom: 0.5rem;">Temps d'attente moyen</div>
+                    <div>VIP: <span id="vip-wait-time">0.0s</span></div>
+                    <div>Standard: <span id="standard-wait-time">0.0s</span></div>
+                </div>
+            </div>
+
+            <!-- Ressources Système -->
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-icon icon-resources">💾</div>
+                    <h3 class="card-title">Ressources Système</h3>
+                </div>
+                <div>
+                    <div style="display: flex; justify-content: space-between; margin: 0.5rem 0;">
+                        <span>CPU Disponible</span>
+                        <span id="cpu-available">85.2%</span>
+                    </div>
+                    <div style="background: #e5e7eb; height: 8px; border-radius: 4px;">
+                        <div id="cpu-bar" style="background: #10b981; height: 100%; width: 85%; border-radius: 4px; transition: width 0.3s ease;"></div>
+                    </div>
+                </div>
+                <div style="margin-top: 1rem;">
+                    <div style="display: flex; justify-content: space-between; margin: 0.5rem 0;">
+                        <span>Mémoire Disponible</span>
+                        <span id="memory-available">76.8%</span>
+                    </div>
+                    <div style="background: #e5e7eb; height: 8px; border-radius: 4px;">
+                        <div id="memory-bar" style="background: #3b82f6; height: 100%; width: 77%; border-radius: 4px; transition: width 0.3s ease;"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Métriques de Performance -->
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-icon icon-performance">⚡</div>
+                    <h3 class="card-title">Performances</h3>
+                </div>
+                <div>
+                    <div class="metric-value" id="throughput">127</div>
+                    <div style="font-size: 0.875rem; color: #6b7280;">Requêtes/min</div>
+                    <div class="metric-change metric-up">↗ +12% par rapport à hier</div>
+                </div>
+                <div style="margin-top: 1rem;">
+                    <div>Temps de réponse moyen: <span id="response-time">2.4s</span></div>
+                    <div>Taux de succès: <span id="success-rate">98.7%</span></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Graphiques -->
+        <div class="card large-card">
+            <div class="tabs">
+                <button class="tab active" onclick="showTab('requests')">📊 Flux de Requêtes</button>
+                <button class="tab" onclick="showTab('performance')">⚡ Performances</button>
+                <button class="tab" onclick="showTab('resources')">💾 Ressources</button>
+                <button class="tab" onclick="showTab('logs')">📜 Logs Système</button>
+            </div>
+
+            <div id="requests-tab" class="tab-content active">
+                <div class="chart-container">
+                    <canvas id="requestsChart"></canvas>
+                </div>
+            </div>
+
+            <div id="performance-tab" class="tab-content">
+                <div class="chart-container">
+                    <canvas id="performanceChart"></canvas>
+                </div>
+            </div>
+
+            <div id="resources-tab" class="tab-content">
+                <div class="chart-container">
+                    <canvas id="resourcesChart"></canvas>
+                </div>
+            </div>
+
+            <div id="logs-tab" class="tab-content">
+                <div class="logs" id="system-logs">
+                    <div class="log-entry log-info">[2024-06-29 14:30:22] INFO - Système démarré avec succès</div>
+                    <div class="log-entry log-success">[2024-06-29 14:30:25] SUCCESS - ClientManagerAgent opérationnel</div>
+                    <div class="log-entry log-success">[2024-06-29 14:30:27] SUCCESS - ResourceManagerAgent opérationnel</div>
+                    <div class="log-entry log-success">[2024-06-29 14:30:29] SUCCESS - LoadBalancerAgent opérationnel</div>
+                    <div class="log-entry log-success">[2024-06-29 14:30:31] SUCCESS - MonitorAgent opérationnel</div>
+                    <div class="log-entry log-info">[2024-06-29 14:30:35] INFO - Système prêt à recevoir des requêtes</div>
+                    <div class="log-entry log-info">[2024-06-29 14:31:02] INFO - Nouvelle requête VIP reçue (req-1001)</div>
+                    <div class="log-entry log-success">[2024-06-29 14:31:03] SUCCESS - Requête req-1001 allouée au serveur-01</div>
+                    <div class="log-entry log-info">[2024-06-29 14:31:15] INFO - Nouvelle requête standard reçue (req-1002)</div>
+                    <div class="log-entry log-warning">[2024-06-29 14:31:30] WARNING - File d'attente VIP à 85% de capacité</div>
+                    <div class="log-entry log-success">[2024-06-29 14:31:45] SUCCESS - Requête req-1001 terminée avec succès</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Variables globales
+        let isSimulationRunning = false;
+        let simulationInterval;
+        let requestsChart, performanceChart, resourcesChart;
+
+        // Données simulées
+        let simulationData = {
+            vipQueue: 0,
+            standardQueue: 0,
+            cpuUsage: 85.2,
+            memoryUsage: 76.8,
+            throughput: 127,
+            responseTime: 2.4,
+            successRate: 98.7,
+            vipWaitTime: 0.8,
+            standardWaitTime: 4.2
+        };
+
+        // Initialisation des graphiques
+        function initCharts() {
+            // Graphique des requêtes
+            const ctx1 = document.getElementById('requestsChart').getContext('2d');
+            requestsChart = new Chart(ctx1, {
+                type: 'line',
+                data: {
+                    labels: Array.from({length: 20}, (_, i) => `${14 + Math.floor(i/4)}:${(i%4)*15}0`),
+                    datasets: [{
+                        label: 'Requêtes VIP',
+                        data: Array.from({length: 20}, () => Math.floor(Math.random() * 30) + 10),
+                        borderColor: '#f59e0b',
+                        backgroundColor: 'rgba(245, 158, 11, 0.1)',
+                        tension: 0.4
+                    }, {
+                        label: 'Requêtes Standard',
+                        data: Array.from({length: 20}, () => Math.floor(Math.random() * 50) + 20),
+                        borderColor: '#6b7280',
+                        backgroundColor: 'rgba(107, 114, 128, 0.1)',
+                        tension: 0.4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'top'
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true
+                        }
+                    }
+                }
+            });
+
+            // Graphique des performances
+            const ctx2 = document.getElementById('performanceChart').getContext('2d');
+            performanceChart = new Chart(ctx2, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Succès', 'Échecs', 'En cours'],
+                    datasets: [{
+                        data: [987, 13, 45],
+                        backgroundColor: ['#10b981', '#ef4444', '#f59e0b']
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom'
+                        }
+                    }
+                }
+            });
+
+            // Graphique des ressources
+            const ctx3 = document.getElementById('resourcesChart').getContext('2d');
+            resourcesChart = new Chart(ctx3, {
+                type: 'bar',
+                data: {
+                    labels: ['CPU', 'Mémoire', 'Réseau', 'Stockage'],
+                    datasets: [{
+                        label: 'Utilisation (%)',
+                        data: [85.2, 76.8, 45.3, 62.1],
+                        backgroundColor: ['#ef4444', '#3b82f6', '#10b981', '#f59e0b']
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            max: 100
+                        }
+                    }
+                }
+            });
+        }
+
+        // Gestion des onglets
+        function showTab(tabName) {
+            // Masquer tous les contenus
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.remove('active');
+            });
+
+            // Désactiver tous les onglets
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+
+            // Activer l'onglet sélectionné
+            document.getElementById(tabName + '-tab').classList.add('active');
+            event.target.classList.add('active');
+        }
+
+        // Simulation
+        function startSimulation() {
+            if (isSimulationRunning) return;
+
+            isSimulationRunning = true;
+            simulationInterval = setInterval(updateSimulation, 2000);
+
+            addLog('INFO', 'Simulation démarrée');
+        }
+
+        function stopSimulation() {
+            if (!isSimulationRunning) return;
+
+            isSimulationRunning = false;
+            clearInterval(simulationInterval);
+
+            addLog('INFO', 'Simulation arrêtée');
+        }
+
+        function updateSimulation() {
+            // Simuler l'arrivée de nouvelles requêtes
+            if (Math.random() < 0.7) {
+                const isVip = Math.random() < 0.3;
+                if (isVip) {
+                    simulationData.vipQueue += Math.floor(Math.random() * 3) + 1;
+                    addLog('INFO', `Nouvelle requête VIP reçue (req-${Date.now()})`);
+                } else {
+                    simulationData.standardQueue += Math.floor(Math.random() * 5) + 1;
+                    addLog('INFO', `Nouvelle requête standard reçue (req-${Date.now()})`);
+                }
+            }
+
+            // Simuler le traitement des requêtes
+            if (simulationData.vipQueue > 0 && Math.random() < 0.8) {
+                simulationData.vipQueue -= Math.floor(Math.random() * 2) + 1;
+                simulationData.vipQueue = Math.max(0, simulationData.vipQueue);
+                addLog('SUCCESS', 'Requête VIP traitée avec succès');
+            }
+
+            if (simulationData.standardQueue > 0 && Math.random() < 0.6) {
+                simulationData.standardQueue -= Math.floor(Math.random() * 3) + 1;
+                simulationData.standardQueue = Math.max(0, simulationData.standardQueue);
+                addLog('SUCCESS', 'Requête standard traitée avec succès');
+            }
+
+            // Simuler les changements de ressources
+            simulationData.cpuUsage += (Math.random() - 0.5) * 10;
+            simulationData.cpuUsage = Math.max(20, Math.min(95, simulationData.cpuUsage));
+
+            simulationData.memoryUsage += (Math.random() - 0.5) * 8;
+            simulationData.memoryUsage = Math.max(30, Math.min(90, simulationData.memoryUsage));
+
+            // Mettre à jour l'interface
+            updateUI();
+
+            // Avertissements
+            if (simulationData.vipQueue > 10) {
+                addLog('WARNING', 'File d\'attente VIP surchargée');
+            }
+            if (simulationData.cpuUsage > 90) {
+                addLog('WARNING', 'Utilisation CPU critique');
+            }
+        }
+
+        function updateUI() {
+            document.getElementById('vip-queue-size').textContent = simulationData.vipQueue;
+            document.getElementById('standard-queue-size').textContent = simulationData.standardQueue;
+            document.getElementById('cpu-available').textContent = simulationData.cpuUsage.toFixed(1) + '%';
+            document.getElementById('memory-available').textContent = simulationData.memoryUsage.toFixed(1) + '%';
+            document.getElementById('vip-wait-time').textContent = simulationData.vipWaitTime.toFixed(1) + 's';
+            document.getElementById('standard-wait-time').textContent = simulationData.standardWaitTime.toFixed(1) + 's';
+
+            // Mettre à jour les barres de progression
+            document.getElementById('cpu-bar').style.width = simulationData.cpuUsage + '%';
+            document.getElementById('memory-bar').style.width = simulationData.memoryUsage + '%';
+
+            // Mettre à jour les graphiques
+            if (requestsChart) {
+                requestsChart.data.datasets[0].data.push(simulationData.vipQueue);
+                requestsChart.data.datasets[1].data.push(simulationData.standardQueue);
+
+                if (requestsChart.data.datasets[0].data.length > 20) {
+                    requestsChart.data.datasets[0].data.shift();
+                    requestsChart.data.datasets[1].data.shift();
+                }
+
+                requestsChart.update('none');
+            }
+        }
+
+        function addLog(type, message) {
+            const logs = document.getElementById('system-logs');
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = document.createElement('div');
+            logEntry.className = `log-entry log-${type.toLowerCase()}`;
+            logEntry.textContent = `[${timestamp}] ${type} - ${message}`;
+
+            logs.appendChild(logEntry);
+            logs.scrollTop = logs.scrollHeight;
+
+            // Limiter le nombre de logs
+            const entries = logs.querySelectorAll('.log-entry');
+            if (entries.length > 50) {
+                entries[0].remove();
+            }
+        }
+
+        function resetMetrics() {
+            simulationData.vipQueue = 0;
+            simulationData.standardQueue = 0;
+            simulationData.cpuUsage = 85.2;
+            simulationData.memoryUsage = 76.8;
+
+            updateUI();
+            addLog('INFO', 'Métriques réinitialisées');
+        }
+
+        // Initialisation
+        document.addEventListener('DOMContentLoaded', function() {
+            initCharts();
+
+            // Démarrer une simulation légère au démarrage
+            setTimeout(() => {
+                simulationData.vipQueue = 3;
+                simulationData.standardQueue = 8;
+                updateUI();
+            }, 1000);
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,618 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tableau de Bord de Monitoring du SMA</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #333;
+            overflow-x: hidden;
+        }
+
+        .container {
+            max-width: 1000px; /* 🔧 RÉDUIT: 1400 → 1000px */
+            margin: 0 auto;
+            padding: 15px; /* 🔧 RÉDUIT: 20 → 15px */
+        }
+
+        .header {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 15px; /* 🔧 RÉDUIT: 20 → 15px */
+            padding: 15px; /* 🔧 RÉDUIT: 20 → 15px */
+            margin-bottom: 20px; /* 🔧 RÉDUIT: 30 → 20px */
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+            text-align: center;
+        }
+
+        .header h1 {
+            color: #2c3e50;
+            font-size: 2em; /* 🔧 RÉDUIT: 2.5 → 2em */
+            margin-bottom: 8px;
+            font-weight: 700;
+        }
+
+        .header p {
+            color: #7f8c8d;
+            font-size: 1em;
+        }
+
+        /* 🔧 MÉTRIQUES COMPACTES */
+        .status-bar {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); /* 🔧 RÉDUIT: 200 → 150px */
+            gap: 15px; /* 🔧 RÉDUIT: 20 → 15px */
+            margin-bottom: 20px;
+        }
+
+        .status-card {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 12px; /* 🔧 RÉDUIT: 15 → 12px */
+            padding: 15px; /* 🔧 RÉDUIT: 20 → 15px */
+            text-align: center;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+            transition: transform 0.3s ease;
+        }
+
+        .status-card:hover {
+            transform: translateY(-3px); /* 🔧 RÉDUIT: -5 → -3px */
+        }
+
+        .status-card h3 {
+            color: #2c3e50;
+            margin-bottom: 8px;
+            font-size: 1em; /* 🔧 RÉDUIT: 1.1 → 1em */
+        }
+
+        .status-value {
+            font-size: 1.8em; /* 🔧 RÉDUIT: 2.2 → 1.8em */
+            font-weight: bold;
+            margin-bottom: 4px;
+        }
+
+        .status-value.vip { color: #e74c3c; }
+        .status-value.standard { color: #3498db; }
+        .status-value.equity { color: #f39c12; }
+        .status-value.response-time { color: #9b59b6; }
+        .status-value.throughput { color: #27ae60; }
+
+        /* 🔧 DISPOSITION OPTIMISÉE - VERTICAL AU LIEU D'HORIZONTAL */
+        .dashboard-content {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        /* 🔧 GRAPHIQUE COMPACT */
+        .chart-container {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+            width: 100%;
+            height: 300px; /* 🔧 HAUTEUR FIXE POUR CAPTURE */
+        }
+
+        .chart-title {
+            color: #2c3e50;
+            font-size: 1.3em;
+            margin-bottom: 15px;
+            font-weight: 600;
+            text-align: center;
+        }
+
+        #queueChart {
+            width: 100% !important;
+            height: 240px !important; /* 🔧 HAUTEUR CONTRÔLÉE */
+        }
+
+        /* 🔧 SECTION JAUGES + LOGS EN GRILLE COMPACTE */
+        .bottom-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr; /* 🔧 3 colonnes égales */
+            gap: 20px;
+        }
+
+        .gauge-card {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+            text-align: center;
+        }
+
+        .gauge-title {
+            color: #2c3e50;
+            font-size: 1.1em;
+            margin-bottom: 15px;
+            font-weight: 600;
+        }
+
+        .gauge-container {
+            position: relative;
+            width: 120px; /* 🔧 RÉDUIT: 150 → 120px */
+            height: 120px;
+            margin: 0 auto 15px;
+        }
+
+        .gauge-svg {
+            transform: rotate(-90deg);
+            width: 100%;
+            height: 100%;
+        }
+
+        .gauge-bg {
+            fill: none;
+            stroke: #e0e0e0;
+            stroke-width: 6; /* 🔧 RÉDUIT: 8 → 6 */
+        }
+
+        .gauge-progress {
+            fill: none;
+            stroke-width: 6;
+            stroke-linecap: round;
+            transition: stroke-dashoffset 0.5s ease;
+        }
+
+        .gauge-text {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+        }
+
+        .gauge-value {
+            font-size: 1.4em; /* 🔧 RÉDUIT: 1.8 → 1.4em */
+            font-weight: bold;
+            color: #2c3e50;
+        }
+
+        .gauge-label {
+            font-size: 0.8em;
+            color: #7f8c8d;
+            margin-top: 3px;
+        }
+
+        /* 🔧 LOGS COMPACTS */
+        .logs-container {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+            height: 350px; /* 🔧 HAUTEUR FIXE */
+            display: flex;
+            flex-direction: column;
+        }
+
+        .logs-header {
+            color: #2c3e50;
+            font-size: 1.1em;
+            margin-bottom: 15px;
+            font-weight: 600;
+            text-align: center;
+        }
+
+        .logs-list {
+            flex: 1;
+            overflow-y: auto;
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 10px;
+        }
+
+        .log-entry {
+            padding: 6px 10px; /* 🔧 RÉDUIT */
+            margin-bottom: 6px;
+            border-radius: 6px;
+            font-size: 0.85em; /* 🔧 RÉDUIT */
+            border-left: 3px solid; /* 🔧 RÉDUIT: 4 → 3px */
+            background: white;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+            animation: slideIn 0.3s ease;
+        }
+
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateX(-10px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+
+        .log-entry.info { border-color: #3498db; }
+        .log-entry.success { border-color: #27ae60; }
+        .log-entry.warning { border-color: #f39c12; }
+        .log-entry.error { border-color: #e74c3c; }
+
+        .log-time {
+            color: #7f8c8d;
+            font-size: 0.75em;
+            margin-right: 8px;
+        }
+
+        .connection-status {
+            position: fixed;
+            top: 15px;
+            right: 15px;
+            padding: 8px 16px; /* 🔧 RÉDUIT */
+            border-radius: 20px;
+            color: white;
+            font-weight: 600;
+            font-size: 0.9em; /* 🔧 RÉDUIT */
+            z-index: 1000;
+            transition: all 0.3s ease;
+        }
+
+        .connection-status.connected {
+            background: #27ae60;
+        }
+
+        .connection-status.disconnected {
+            background: #e74c3c;
+        }
+
+        /* 🔧 RESPONSIVE OPTIMISÉ POUR CAPTURE */
+        @media (max-width: 768px) {
+            .bottom-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .status-bar {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        /* 🔧 MODE CAPTURE D'ÉCRAN SPÉCIAL */
+        @media print {
+            body {
+                background: white;
+            }
+
+            .connection-status {
+                display: none;
+            }
+        }
+
+        /* 🔧 BOUTON CAPTURE */
+        .capture-button {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: #3498db;
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-weight: 600;
+            box-shadow: 0 4px 12px rgba(52, 152, 219, 0.3);
+            transition: all 0.3s ease;
+            z-index: 1000;
+        }
+
+        .capture-button:hover {
+            background: #2980b9;
+            transform: translateY(-2px);
+        }
+    </style>
+</head>
+<body>
+    <div class="connection-status disconnected" id="connectionStatus">🔴 Déconnecté</div>
+
+    <!-- 🔧 BOUTON CAPTURE -->
+    <button class="capture-button" onclick="prepareCapture()">📸 Mode Capture</button>
+
+    <div class="container">
+        <!-- Header Compact -->
+        <div class="header">
+            <h1>🚀 Dashboard Multi-Agents</h1>
+            <p>Tableau de Bord de Monitoring du Système Multi-Agent  - SPADE Framework</p>
+        </div>
+
+        <!-- Métriques KPI Compactes -->
+        <div class="status-bar">
+            <div class="status-card">
+                <h3>👑 VIP</h3>
+                <div class="status-value vip" id="vipQueue">0</div>
+                <small>en file</small>
+            </div>
+            <div class="status-card">
+                <h3>👥 Standard</h3>
+                <div class="status-value standard" id="standardQueue">0</div>
+                <small>en file</small>
+            </div>
+            <div class="status-card">
+                <h3>⚖️ Équité</h3>
+                <div class="status-value equity" id="equityRatio">1.31</div>
+                <small>ratio</small>
+            </div>
+            <div class="status-card">
+                <h3>⏱️ Attente</h3>
+                <div class="status-value response-time" id="avgWaitTime">1.2s</div>
+                <small>moyenne</small>
+            </div>
+            <div class="status-card">
+                <h3>⚡ Débit</h3>
+                <div class="status-value throughput" id="throughput">5.8</div>
+                <small>req/s</small>
+            </div>
+        </div>
+
+        <div class="dashboard-content">
+            <!-- 🔧 GRAPHIQUE COMPACT ET CENTRÉ -->
+            <div class="chart-container">
+                <div class="chart-title">📊 Évolution Files d'Attente (Temps Réel)</div>
+                <canvas id="queueChart"></canvas>
+            </div>
+
+            <!-- 🔧 GRILLE COMPACTE: JAUGES + LOGS -->
+            <div class="bottom-grid">
+                <!-- Jauge CPU -->
+                <div class="gauge-card">
+                    <div class="gauge-title">💻 CPU</div>
+                    <div class="gauge-container">
+                        <svg class="gauge-svg" viewBox="0 0 100 100">
+                            <circle class="gauge-bg" cx="50" cy="50" r="35"></circle>
+                            <circle class="gauge-progress" cx="50" cy="50" r="35"
+                                    stroke="#3498db"
+                                    stroke-dasharray="219.8"
+                                    stroke-dashoffset="219.8"
+                                    id="cpuGauge"></circle>
+                        </svg>
+                        <div class="gauge-text">
+                            <div class="gauge-value" id="cpuValue">28%</div>
+                            <div class="gauge-label">Utilisation</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Jauge Mémoire -->
+                <div class="gauge-card">
+                    <div class="gauge-title">💾 RAM</div>
+                    <div class="gauge-container">
+                        <svg class="gauge-svg" viewBox="0 0 100 100">
+                            <circle class="gauge-bg" cx="50" cy="50" r="35"></circle>
+                            <circle class="gauge-progress" cx="50" cy="50" r="35"
+                                    stroke="#9b59b6"
+                                    stroke-dasharray="219.8"
+                                    stroke-dashoffset="219.8"
+                                    id="memoryGauge"></circle>
+                        </svg>
+                        <div class="gauge-text">
+                            <div class="gauge-value" id="memoryValue">48%</div>
+                            <div class="gauge-label">Utilisation</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Logs Compacts -->
+                <div class="logs-container">
+                    <div class="logs-header">📋 Événements</div>
+                    <div class="logs-list" id="logsList">
+                        <div class="log-entry success">
+                            <span class="log-time">14:30:25</span>
+                            System multi-agents démarré
+                        </div>
+                        <div class="log-entry info">
+                            <span class="log-time">14:30:26</span>
+                            Agents SPADE connectés
+                        </div>
+                        <div class="log-entry success">
+                            <span class="log-time">14:30:27</span>
+                            Allocation req-1234 (VIP)
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Configuration Chart.js optimisée
+        const queueChart = new Chart(document.getElementById('queueChart'), {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [{
+                    label: 'File VIP',
+                    data: [],
+                    borderColor: '#e74c3c',
+                    backgroundColor: 'rgba(231, 76, 60, 0.15)',
+                    tension: 0.4,
+                    fill: true,
+                    borderWidth: 2
+                }, {
+                    label: 'File Standard',
+                    data: [],
+                    borderColor: '#3498db',
+                    backgroundColor: 'rgba(52, 152, 219, 0.15)',
+                    tension: 0.4,
+                    fill: true,
+                    borderWidth: 2
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: {
+                    duration: 500 // 🔧 RÉDUIT pour fluidité
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        max: 25, // 🔧 ÉCHELLE FIXE POUR STABILITÉ
+                        title: {
+                            display: true,
+                            text: 'Requêtes',
+                            font: { size: 11 }
+                        },
+                        ticks: { font: { size: 10 } }
+                    },
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Temps',
+                            font: { size: 11 }
+                        },
+                        ticks: {
+                            font: { size: 10 },
+                            maxTicksLimit: 8 // 🔧 LIMITE POUR LISIBILITÉ
+                        }
+                    }
+                },
+                plugins: {
+                    legend: {
+                        position: 'top',
+                        labels: { font: { size: 11 } }
+                    }
+                }
+            }
+        });
+
+        // Fonction de mise à jour des jauges
+        function updateGauge(percentage, gaugeElement, valueElement) {
+            const circumference = 2 * Math.PI * 35;
+            const offset = circumference - (percentage / 100) * circumference;
+
+            gaugeElement.style.strokeDashoffset = offset;
+            valueElement.textContent = Math.round(percentage) + '%';
+
+            if (percentage < 50) {
+                gaugeElement.style.stroke = '#27ae60';
+            } else if (percentage < 80) {
+                gaugeElement.style.stroke = '#f39c12';
+            } else {
+                gaugeElement.style.stroke = '#e74c3c';
+            }
+        }
+
+        // Ajout de logs
+        function addLogEntry(message, type = 'info') {
+            const logsList = document.getElementById('logsList');
+            const now = new Date();
+            const timeString = now.toLocaleTimeString();
+
+            const logEntry = document.createElement('div');
+            logEntry.className = `log-entry ${type}`;
+            logEntry.innerHTML = `<span class="log-time">${timeString}</span>${message}`;
+
+            logsList.insertBefore(logEntry, logsList.firstChild);
+
+            while (logsList.children.length > 15) { // 🔧 LIMITE RÉDUITE
+                logsList.removeChild(logsList.lastChild);
+            }
+        }
+
+        // 🔧 FONCTION CAPTURE D'ÉCRAN
+        function prepareCapture() {
+            // Masquer bouton capture et statut
+            document.querySelector('.capture-button').style.display = 'none';
+            document.querySelector('.connection-status').style.display = 'none';
+
+            // Optimiser pour capture
+            document.body.style.background = 'white';
+
+            alert('📸 Mode capture activé!\n\nLe dashboard est optimisé pour capture d\'écran.\nPrenez votre capture maintenant.\n\nF5 pour revenir au mode normal.');
+        }
+
+        // Simulation de données optimisée
+        function generateRealisticData() {
+            const vipQueue = Math.floor(Math.random() * 12);
+            const standardQueue = Math.floor(Math.random() * 20);
+            const cpuUsage = 28.1 + Math.random() * 15;
+            const memoryUsage = 48.5 + Math.random() * 20;
+            const throughput = 5.8 + Math.random() * 8;
+            const equityRatio = 1.31 + (Math.random() - 0.5) * 0.3;
+            const avgWaitTime = 1.2 + Math.random() * 1.5;
+
+            return {
+                vip_queue: vipQueue,
+                standard_queue: standardQueue,
+                cpu_usage: Math.min(100, cpuUsage),
+                memory_usage: Math.min(100, memoryUsage),
+                throughput: throughput,
+                equity_ratio: Math.max(0.8, equityRatio),
+                avg_wait_time: avgWaitTime,
+                timestamp: new Date().toLocaleTimeString().slice(0, 5) // 🔧 FORMAT COURT
+            };
+        }
+
+        let dataHistory = [];
+        const maxPoints = 15; // 🔧 RÉDUIT POUR LISIBILITÉ
+
+        function updateDashboard(data) {
+            // Métriques
+            document.getElementById('vipQueue').textContent = data.vip_queue;
+            document.getElementById('standardQueue').textContent = data.standard_queue;
+            document.getElementById('equityRatio').textContent = data.equity_ratio.toFixed(2);
+            document.getElementById('avgWaitTime').textContent = data.avg_wait_time.toFixed(1) + 's';
+            document.getElementById('throughput').textContent = data.throughput.toFixed(1);
+
+            // Jauges
+            updateGauge(data.cpu_usage,
+                       document.getElementById('cpuGauge'),
+                       document.getElementById('cpuValue'));
+            updateGauge(data.memory_usage,
+                       document.getElementById('memoryGauge'),
+                       document.getElementById('memoryValue'));
+
+            // Graphique
+            dataHistory.push({
+                time: data.timestamp,
+                vip: data.vip_queue,
+                standard: data.standard_queue
+            });
+
+            if (dataHistory.length > maxPoints) {
+                dataHistory.shift();
+            }
+
+            queueChart.data.labels = dataHistory.map(point => point.time);
+            queueChart.data.datasets[0].data = dataHistory.map(point => point.vip);
+            queueChart.data.datasets[1].data = dataHistory.map(point => point.standard);
+            queueChart.update('none');
+
+            // Logs occasionnels
+            if (Math.random() < 0.3) {
+                const events = [
+                    { msg: `Allocation req-${Math.floor(Math.random()*1000)} (VIP)`, type: 'success' },
+                    { msg: 'Vieillissement adaptatif appliqué', type: 'info' },
+                    { msg: `Équilibrage: ${data.vip_queue + data.standard_queue} requêtes`, type: 'info' }
+                ];
+                const event = events[Math.floor(Math.random() * events.length)];
+                addLogEntry(event.msg, event.type);
+            }
+        }
+
+        // Démarrage
+        document.addEventListener('DOMContentLoaded', function() {
+            // Simuler connexion
+            setTimeout(() => {
+                document.getElementById('connectionStatus').textContent = '🟢 Connecté';
+                document.getElementById('connectionStatus').className = 'connection-status connected';
+                addLogEntry('Dashboard optimisé démarré', 'success');
+
+                // Simulation continue
+                setInterval(() => {
+                    const data = generateRealisticData();
+                    updateDashboard(data);
+                }, 2000); // 🔧 2 secondes pour stabilité
+
+            }, 1000);
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,4 @@
+Scénario,Volume Total,Traitement Complet,Efficacité,Débit Max,Temps Médian,Équité,Max File VIP,Max File STD,Pression Système,CPU Max,Mémoire Max,Dépendances,Deadlocks
+Baseline,290,290,100.0%,5.8 req/s,1.35s,0.97,2,3,1.7%,28.1%,48.5%,30,0
+Scalability,"2,600","2,600",100.0%,15.4 req/s,17.21s,1.00,0,0,0.0%,0.0%,0.0%,629,0
+Spike Load,777,777,100.0%,15.2 req/s,1.16s,1.41,3,21,3.1%,21.7%,42.2%,54,0

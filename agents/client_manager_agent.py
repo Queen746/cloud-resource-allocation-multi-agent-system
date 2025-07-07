@@ -11,7 +11,6 @@ from spade.behaviour import CyclicBehaviour, PeriodicBehaviour, OneShotBehaviour
 from spade.message import Message
 from spade.template import Template
 
-import system_launcher
 from models.enums import ClientType, RequestStatus
 from algorithms.hrrn_scheduler import HRRNScheduler
 
@@ -25,12 +24,6 @@ class ClientManagerAgent(Agent):
     def __init__(self, jid, password, resource_manager_jid, monitor_jid):
         """
         Initialise l'agent gestionnaire de clients.
-
-        Args:
-            jid (str): JID de l'agent
-            password (str): Mot de passe pour l'authentification
-            resource_manager_jid (str): JID de l'agent gestionnaire de ressources
-            monitor_jid (str): JID de l'agent de monitoring
         """
         super().__init__(jid, password)
         self.display_name = "ClientManagerAgent"
@@ -53,7 +46,13 @@ class ClientManagerAgent(Agent):
 
         # Pour suivre les temps d'arrivée des demandes
         self.request_arrivals = {}
-        self.system_launcher = system_launcher  # Ajouter cette ligne
+
+        # Référence au SystemLauncher (sera injectée)
+        self.system_launcher = None
+
+        # Variables pour la régulation
+        self.throttling_active = False
+        self.aging_factor = 0.5  # Facteur de vieillissement
 
     class RequestQueueBehaviour(CyclicBehaviour):
         """
@@ -135,104 +134,45 @@ class ClientManagerAgent(Agent):
                     content = json.loads(msg.body)
 
                     if msg.metadata.get("type") == "new_request":
-                        request_id = content.get("id")
-                        client = content.get("client")
-                        cpu_required = content.get("cpu_required")
-                        memory_required = content.get("memory_required")
-                        estimated_duration = content.get("estimated_duration")
-                        dependencies = set(content.get("dependencies", []))
-
-                        self.agent.logger.info(
-                            f"Nouvelle demande reçue: {request_id} du client {client['id']} (type: {client['client_type']})")
-
-                        # Créer l'objet de demande
-                        from models.client import Client
-                        from models.resource_request import ResourceRequest
-
-                        client_obj = Client(
-                            client_id=client["id"],
-                            client_type=ClientType[client["client_type"]]
-                        )
-
-                        request = ResourceRequest(
-                            request_id=request_id,
-                            client=client_obj,
-                            cpu_required=cpu_required,
-                            memory_required=memory_required,
-                            estimated_duration=estimated_duration,
-                            dependencies=dependencies
-                        )
-
-                        # Ajouter à la file d'attente appropriée
-                        self.agent.add_request_to_queue(request)
-
-                        # Notifier le MonitorAgent
-                        monitor_msg = Message(to=str(self.agent.monitor_jid))
-                        monitor_msg.set_metadata("type", "new_request")
-                        monitor_msg.body = json.dumps({
-                            "request_id": request_id,
-                            "client_type": client["client_type"],
-                            "timestamp": time.time(),
-                            "arrival_time": request.arrival_time
-                        })
-                        await self.send(monitor_msg)
-
+                        await self.agent._handle_new_request(content)
                     elif msg.metadata.get("type") == "allocation_response":
-                        request_id = content.get("request_id")
-                        status = content.get("status")
-
-                        if status == "allocated":
-                            server_id = content.get("server_id")
-                            estimated_completion = content.get("estimated_completion")
-
-                            self.agent.logger.info(
-                                f"Demande {request_id} allouée sur {server_id}, complétion estimée: {datetime.fromtimestamp(estimated_completion).strftime('%H:%M:%S')}")
-
-                            # Notifier le client (simulé)
-                            self.agent.logger.info(
-                                f"Notification au client: Demande {request_id} en cours de traitement sur {server_id}")
-
-                        elif status == "rejected":
-                            reason = content.get("reason")
-
-                            self.agent.logger.warning(f"Demande {request_id} rejetée: {reason}")
-
-                            # Notifier le client (simulé)
-                            self.agent.logger.info(f"Notification au client: Demande {request_id} rejetée ({reason})")
-
-                        elif status == "pending":
-                            reason = content.get("reason")
-
-                            self.agent.logger.info(f"Demande {request_id} en attente: {reason}")
-
-                            # Si la demande est en attente, la remettre dans la file mais avec un délai
-                            # Pour éviter de retenter immédiatement
-                            if reason == "dependencies_not_satisfied":
-                                self.agent.logger.info(
-                                    f"Remise en file d'attente de {request_id} (dépendances non satisfaites)")
-
+                        await self.agent._handle_allocation_response(content)
                     elif msg.metadata.get("type") == "dependencies_satisfied":
-                        request_id = content.get("request_id")
-
-                        self.agent.logger.info(f"Dépendances satisfaites pour {request_id}, prêt à être traité")
-
-                        # Notifier le client (simulé)
-                        self.agent.logger.info(f"Notification au client: Dépendances satisfaites pour {request_id}")
-
+                        await self.agent._handle_dependencies_satisfied(content)
                     elif msg.metadata.get("type") == "request_completed":
-                        request_id = content.get("request_id")
-                        server_id = content.get("server_id")
-
-                        self.agent.logger.info(f"Demande {request_id} complétée sur {server_id}")
-
-                        # Notifier le client (simulé)
-                        self.agent.logger.info(f"Notification au client: Demande {request_id} complétée")
+                        await self.agent._handle_request_completed(content)
 
                 except Exception as e:
                     self.agent.logger.error(f"Erreur lors du traitement du message: {e}")
 
             # Petit délai pour éviter de surcharger le CPU
             await asyncio.sleep(0.1)
+
+    class ThrottlingBehaviour(CyclicBehaviour):
+        """
+        Comportement pour réguler l'entrée des demandes en fonction de la charge actuelle.
+        """
+
+        async def run(self):
+            # Vérifier le nombre de demandes actives et en file d'attente
+            total_requests = (len(self.agent.vip_queue) +
+                              len(self.agent.standard_queue) +
+                              len(self.agent.processing_requests))
+
+            # Définir un seuil adaptatif basé sur la performance récente
+            threshold = self.agent.calculate_adaptive_threshold()
+
+            if total_requests > threshold:
+                # Mode de régulation : ralentir le traitement des nouvelles demandes
+                self.agent.throttling_active = True
+                self.agent.logger.warning(f"Régulation activée - {total_requests} demandes dans le système")
+
+                # Réduire la fréquence de traitement des nouvelles demandes
+                await asyncio.sleep(1.0)  # Attendre plus longtemps avant de traiter la prochaine demande
+            else:
+                # Mode normal
+                self.agent.throttling_active = False
+                await asyncio.sleep(0.1)
 
     async def setup(self):
         """
@@ -263,12 +203,88 @@ class ClientManagerAgent(Agent):
         completion_template.set_metadata("type", "request_completed")
         self.add_behaviour(self.NewRequestProcessingBehaviour(), completion_template)
 
+        # Ajouter le comportement de régulation
+        self.add_behaviour(self.ThrottlingBehaviour())
+
+    # Méthodes de traitement des messages
+    async def _handle_new_request(self, content):
+        """Traite une nouvelle demande."""
+        request_id = content.get("id")
+        client = content.get("client")
+        cpu_required = content.get("cpu_required")
+        memory_required = content.get("memory_required")
+        estimated_duration = content.get("estimated_duration")
+        dependencies = set(content.get("dependencies", []))
+
+        self.logger.info(
+            f"Nouvelle demande reçue: {request_id} du client {client['id']} (type: {client['client_type']})")
+
+        # Créer l'objet de demande
+        from models.client import Client
+        from models.resource_request import ResourceRequest
+
+        client_obj = Client(
+            client_id=client["id"],
+            client_type=ClientType[client["client_type"]]
+        )
+
+        request = ResourceRequest(
+            request_id=request_id,
+            client=client_obj,
+            cpu_required=cpu_required,
+            memory_required=memory_required,
+            estimated_duration=estimated_duration,
+            dependencies=dependencies
+        )
+
+        # Ajouter à la file d'attente appropriée
+        self.add_request_to_queue(request)
+
+        # Notifier le MonitorAgent
+        monitor_msg = Message(to=str(self.monitor_jid))
+        monitor_msg.set_metadata("type", "new_request")
+        monitor_msg.body = json.dumps({
+            "request_id": request_id,
+            "client_type": client["client_type"],
+            "timestamp": time.time(),
+            "arrival_time": request.arrival_time
+        })
+        await self.send(monitor_msg)
+
+    async def _handle_allocation_response(self, content):
+        """Traite une réponse d'allocation."""
+        request_id = content.get("request_id")
+        status = content.get("status")
+
+        if status == "allocated":
+            server_id = content.get("server_id")
+            estimated_completion = content.get("estimated_completion")
+
+            self.logger.info(
+                f"Demande {request_id} allouée sur {server_id}, complétion estimée: {datetime.fromtimestamp(estimated_completion).strftime('%H:%M:%S')}")
+
+        elif status == "rejected":
+            reason = content.get("reason")
+            self.logger.warning(f"Demande {request_id} rejetée: {reason}")
+
+        elif status == "pending":
+            reason = content.get("reason")
+            self.logger.info(f"Demande {request_id} en attente: {reason}")
+
+    async def _handle_dependencies_satisfied(self, content):
+        """Traite la satisfaction des dépendances."""
+        request_id = content.get("request_id")
+        self.logger.info(f"Dépendances satisfaites pour {request_id}, prêt à être traité")
+
+    async def _handle_request_completed(self, content):
+        """Traite la complétion d'une demande."""
+        request_id = content.get("request_id")
+        server_id = content.get("server_id")
+        await self.on_request_completed(request_id, server_id)
+
     def add_request_to_queue(self, request):
         """
         Ajoute une demande à la file d'attente appropriée.
-
-        Args:
-            request (ResourceRequest): Demande à ajouter
         """
         request.status = RequestStatus.PENDING
         request.arrival_time = time.time()
@@ -286,9 +302,6 @@ class ClientManagerAgent(Agent):
     def remove_request_from_queue(self, request):
         """
         Retire une demande de la file d'attente.
-
-        Args:
-            request (ResourceRequest): Demande à retirer
         """
         if request.client.client_type == ClientType.VIP:
             if request in self.vip_queue:
@@ -299,11 +312,46 @@ class ClientManagerAgent(Agent):
                 self.standard_queue.remove(request)
                 self.logger.info(
                     f"Demande {request.id} retirée de la file standard (taille: {len(self.standard_queue)})")
-    async def _update_queue_sizes(self):
+
+    def calculate_adaptive_threshold(self):
+        """Calcule un seuil adaptatif basé sur les performances récentes."""
+        base_threshold = 100  # Valeur de base
+
+        # Ajuster en fonction du taux de réussite récent
+        if hasattr(self, 'recent_success_rate'):
+            if self.recent_success_rate < 0.8:  # Si taux de réussite < 80%
+                return max(20, base_threshold * self.recent_success_rate)  # Réduire le seuil, mais pas en dessous de 20
+
+        return base_threshold
+
+    def update_priorities(self):
         """
-        Met à jour les tailles des files d'attente et notifie le MonitorAgent.
+        Met à jour les priorités des demandes pour maintenir l'équité.
         """
-        await self.notify_monitor_queue_update()
+        vip_queue_size = len(self.vip_queue)
+        standard_queue_size = len(self.standard_queue)
+        total_size = vip_queue_size + standard_queue_size
+
+        if total_size > 0:
+            vip_ratio = vip_queue_size / total_size
+
+            # Si le ratio de VIP est trop élevé (> 30%), augmenter l'âge effectif des demandes standard
+            if vip_ratio > 0.3 and standard_queue_size > 0:
+                self.logger.info("Augmentation de la priorité des demandes standard pour maintenir l'équité")
+                aging_factor = 1.2  # Augmenter de 20%
+
+                for request in self.standard_queue:
+                    if hasattr(request, 'priority'):
+                        # Augmenter la priorité effective par l'âge
+                        age = time.time() - request.arrival_time
+                        request.effective_priority = request.priority + (self.aging_factor * aging_factor * age)
+
+            # Si le ratio de standard est trop élevé, augmenter la priorité des VIP
+            elif vip_ratio < 0.1 and vip_queue_size > 0:
+                self.logger.info("Augmentation de la priorité des demandes VIP pour maintenir le SLA")
+                for request in self.vip_queue:
+                    if hasattr(request, 'priority'):
+                        request.priority *= 1.5  # Augmenter de 50%
 
     async def notify_monitor_queue_update(self):
         """
@@ -327,9 +375,6 @@ class ClientManagerAgent(Agent):
     async def process_simulation_request(self, request_data):
         """
         Traite une demande de simulation.
-
-        Args:
-            request_data (dict): Données de la demande de simulation
         """
         try:
             # Créer l'objet Client à partir du dictionnaire
@@ -350,7 +395,7 @@ class ClientManagerAgent(Agent):
             # Ajouter à la file d'attente appropriée
             self.add_request_to_queue(request)
 
-            # Notifier le MonitorAgent via comportement OneShot
+            # Notifier le MonitorAgent
             class NotifyMonitorBehaviour(OneShotBehaviour):
                 async def run(self):
                     message = Message(to=str(self.agent.monitor_jid))
@@ -368,63 +413,26 @@ class ClientManagerAgent(Agent):
         except Exception as e:
             self.logger.error(f"Erreur lors du traitement de la demande de simulation: {e}", exc_info=True)
 
-    def process_request(self, request):
-        """
-        Traite une demande et met à jour les files d'attente.
-
-        Args:
-            request (ResourceRequest): La demande à traiter
-        """
-        # Retirer la demande de la file d'attente appropriée
-        self.remove_request_from_queue(request)
-
-        # Ajouter comportement pour notifier le MonitorAgent
-        class NotifyQueueUpdateBehaviour(OneShotBehaviour):
-            async def run(self):
-                await self.agent.notify_monitor_queue_update()
-
     async def on_request_completed(self, request_id, server_id):
         """
-        Appelé lorsqu'une demande est complétée par le ResourceManagerAgent.
-
-        Args:
-            request_id (str): Identifiant de la demande
-            server_id (str): Identifiant du serveur où la demande a été traitée
+        Appelé lorsqu'une demande est complétée.
         """
         self.logger.info(f"Demande {request_id} complétée sur {server_id}")
 
-        # Trouver la demande dans les listes de demandes actives/en attente
+        # Trouver et retirer la demande
         request_found = False
         found_request = None
 
-        # Chercher d'abord dans les demandes en cours de traitement
-        for request in list(self.processing_requests):
-            if request.id == request_id:
-                found_request = request
-                self.processing_requests.remove(request)
-                request_found = True
-                break
-
-        # Si non trouvée, chercher dans les files d'attente VIP et standard
-        if not request_found:
-            for queue in [self.vip_queue, self.standard_queue]:
-                for request in list(queue):
-                    if request.id == request_id:
-                        found_request = request
-                        queue.remove(request)
-                        request_found = True
-                        break
-                if request_found:
-                    break
-
-        # Si non trouvée, chercher dans les demandes en attente de dépendances
-        if not request_found:
-            for request in list(self.waiting_dependencies):
+        # Chercher dans toutes les listes
+        for request_list in [self.processing_requests, self.vip_queue, self.standard_queue, self.waiting_dependencies]:
+            for request in list(request_list):
                 if request.id == request_id:
                     found_request = request
-                    self.waiting_dependencies.remove(request)
+                    request_list.remove(request)
                     request_found = True
                     break
+            if request_found:
+                break
 
         if request_found and found_request:
             # Mettre à jour les statistiques
@@ -433,12 +441,11 @@ class ClientManagerAgent(Agent):
             # Notifier le client (simulation)
             self.logger.info(f"Client {found_request.client.id} notifié de la complétion de la demande {request_id}")
 
-            # Vérifier si cette demande est une dépendance pour d'autres demandes
-            # et les déplacer vers la file d'attente appropriée si toutes leurs dépendances sont satisfaites
+            # Vérifier les dépendances satisfaites
             await self._check_dependencies_satisfied(request_id)
 
             # Mettre à jour les tailles des files d'attente
-            await self._update_queue_sizes()
+            await self.notify_monitor_queue_update()
 
             # Notifier le MonitorAgent
             await self._notify_monitor_completion(request_id, server_id)
@@ -454,31 +461,22 @@ class ClientManagerAgent(Agent):
     async def _check_dependencies_satisfied(self, completed_request_id):
         """
         Vérifie si la complétion d'une demande satisfait les dépendances d'autres demandes.
-
-        Args:
-            completed_request_id (str): Identifiant de la demande complétée
         """
-        # Parcourir les demandes en attente de dépendances
         requests_to_move = []
 
         for request in self.waiting_dependencies:
             if completed_request_id in request.dependencies:
-                # Retirer la dépendance
                 request.dependencies.remove(completed_request_id)
 
-                # Si toutes les dépendances sont satisfaites, déplacer vers la file d'attente
                 if not request.dependencies:
                     requests_to_move.append(request)
-
-                    # Notifier le MonitorAgent que les dépendances sont satisfaites
                     await self._notify_monitor_dependencies_satisfied(request.id)
 
-        # Déplacer les demandes dont les dépendances sont satisfaites vers la file appropriée
+        # Déplacer les demandes dont les dépendances sont satisfaites
         for request in requests_to_move:
             self.waiting_dependencies.remove(request)
 
-            # Déterminer la file d'attente appropriée
-            if request.client.is_vip():
+            if request.client.client_type == ClientType.VIP:
                 self.vip_queue.append(request)
                 self.logger.info(f"Demande {request.id} déplacée vers la file VIP (dépendances satisfaites)")
             else:
@@ -488,27 +486,16 @@ class ClientManagerAgent(Agent):
     async def _notify_monitor_completion(self, request_id, server_id):
         """
         Notifie le MonitorAgent de la complétion d'une demande.
-
-        Args:
-            request_id (str): Identifiant de la demande complétée
-            server_id (str): Identifiant du serveur où la demande a été traitée
         """
         if self.monitor_jid:
             try:
-                # Créer le message
                 msg = Message(to=str(self.monitor_jid))
                 msg.set_metadata("type", "request_completed")
-
-                # Préparer le contenu
-                content = {
+                msg.body = json.dumps({
                     "request_id": request_id,
                     "server_id": server_id,
                     "timestamp": time.time()
-                }
-
-                msg.body = json.dumps(content)
-
-                # Envoyer le message
+                })
                 await self.send(msg)
             except Exception as e:
                 self.logger.error(f"Erreur lors de la notification du MonitorAgent: {e}")
@@ -516,26 +503,15 @@ class ClientManagerAgent(Agent):
     async def _notify_monitor_dependencies_satisfied(self, request_id):
         """
         Notifie le MonitorAgent que toutes les dépendances d'une demande sont satisfaites.
-
-        Args:
-            request_id (str): Identifiant de la demande dont les dépendances sont satisfaites
         """
         if self.monitor_jid:
             try:
-                # Créer le message
                 msg = Message(to=str(self.monitor_jid))
                 msg.set_metadata("type", "dependencies_satisfied")
-
-                # Préparer le contenu
-                content = {
+                msg.body = json.dumps({
                     "request_id": request_id,
                     "timestamp": time.time()
-                }
-
-                msg.body = json.dumps(content)
-
-                # Envoyer le message
+                })
                 await self.send(msg)
             except Exception as e:
                 self.logger.error(f"Erreur lors de la notification du MonitorAgent: {e}")
-

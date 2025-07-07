@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Monitoring Temps Réel - Système Multi-Agents</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.1.3/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <!-- Insérer ici le CSS et JavaScript du dashboard corrigé -->
+    <style>
+        :root {
+            --primary-color: #2563eb;
+            --success-color: #10b981;
+            --warning-color: #f59e0b;
+            --danger-color: #ef4444;
+            --info-color: #06b6d4;
+        }
+        body {
+            background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        .dashboard-header {
+            background: linear-gradient(135deg, var(--primary-color) 0%, #1e40af 100%);
+            color: white;
+            padding: 20px 0;
+            margin-bottom: 30px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+        }
+        .metric-card {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            margin-bottom: 20px;
+            box-shadow: 0 8px 25px rgba(0,0,0,0.08);
+            border: 1px solid #e2e8f0;
+            position: relative;
+            overflow: hidden;
+        }
+        .metric-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 4px;
+            height: 100%;
+            background: var(--primary-color);
+        }
+        .metric-value {
+            font-size: 2.5rem;
+            font-weight: bold;
+            margin: 10px 0;
+        }
+        .status-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 8px;
+        }
+        .status-online { background: var(--success-color); }
+        .status-idle { background: #6b7280; }
+        .status-warning { background: var(--warning-color); }
+        .status-error { background: var(--danger-color); }
+        .data-source {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 10px;
+            margin-bottom: 15px;
+            font-size: 0.9rem;
+        }
+        .real-data { border-left: 4px solid var(--success-color); }
+        .simulated-data { border-left: 4px solid var(--warning-color); }
+    </style>
+</head>
+<body>
+    <div class="dashboard-header">
+        <div class="container">
+            <div class="row align-items-center">
+                <div class="col-md-8">
+                    <h1 class="mb-0">
+                        <i class="fas fa-chart-line me-3"></i>
+                        Monitoring Temps Réel - Système Multi-Agents
+                    </h1>
+                    <p class="mb-0 mt-2 opacity-75">Dashboard Avancé avec Connexion aux Tests Réels</p>
+                </div>
+                <div class="col-md-4 text-end">
+                    <div id="systemStatus">
+                        <span class="status-indicator status-idle"></span>
+                        <span>Chargement...</span>
+                    </div>
+                    <div id="lastUpdate" style="color: rgba(255,255,255,0.8); font-size: 0.85rem; margin-top: 5px;">
+                        Dernière mise à jour: --:--:--
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="container-fluid">
+        <div class="row">
+            <div class="col-12">
+                <div id="dataSourceIndicator" class="data-source simulated-data">
+                    <i class="fas fa-info-circle me-2"></i>
+                    <strong>Mode:</strong> <span id="dataMode">Chargement...</span>
+                    <br><small>Connexion aux données de test en cours...</small>
+                </div>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-lg-3 col-md-6">
+                <div class="metric-card">
+                    <div style="color: #64748b; font-size: 0.9rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px;">
+                        <i class="fas fa-tachometer-alt me-2"></i>
+                        Débit Actuel
+                    </div>
+                    <div class="metric-value text-primary" id="currentThroughput">--</div>
+                    <div class="d-flex justify-content-between align-items-center">
+                        <small class="text-muted">req/s</small>
+                        <small class="text-muted">Max testé: 8.4</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-3 col-md-6">
+                <div class="metric-card">
+                    <div style="color: #64748b; font-size: 0.9rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px;">
+                        <i class="fas fa-clock me-2"></i>
+                        Temps de Réponse
+                    </div>
+                    <div class="metric-value text-success" id="avgResponseTime">--</div>
+                    <div class="d-flex justify-content-between align-items-center">
+                        <small class="text-muted">secondes</small>
+                        <small class="text-muted">Objectif: 1.84s</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-3 col-md-6">
+                <div class="metric-card">
+                    <div style="color: #64748b; font-size: 0.9rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px;">
+                        <i class="fas fa-balance-scale me-2"></i>
+                        Ratio d'Équité
+                    </div>
+                    <div class="metric-value text-info" id="equityRatio">--</div>
+                    <div class="d-flex justify-content-between align-items-center">
+                        <small class="text-muted">Standard/VIP</small>
+                        <small class="text-muted">Optimal: 1.05</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-3 col-md-6">
+                <div class="metric-card">
+                    <div style="color: #64748b; font-size: 0.9rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px;">
+                        <i class="fas fa-check-circle me-2"></i>
+                        Taux de Réussite
+                    </div>
+                    <div class="metric-value text-success" id="successRate">--</div>
+                    <div class="d-flex justify-content-between align-items-center">
+                        <small class="text-muted">Global</small>
+                        <small class="text-muted">Objectif: 100%</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-lg-4">
+                <div class="metric-card">
+                    <h5 class="mb-3">
+                        <i class="fas fa-clipboard-check me-2"></i>
+                        Test Baseline
+                    </h5>
+                    <div class="d-flex justify-content-between mb-2">
+                        <span>Requêtes Traitées</span>
+                        <span><strong id="baselineRequests">--</strong></span>
+                    </div>
+                    <div class="d-flex justify-content-between mb-2">
+                        <span>Taux de Réussite</span>
+                        <span class="text-success"><strong id="baselineSuccess">--</strong></span>
+                    </div>
+                    <div class="d-flex justify-content-between mb-2">
+                        <span>Temps Réponse</span>
+                        <span><strong id="baselineResponse">--</strong></span>
+                    </div>
+                    <div class="d-flex justify-content-between">
+                        <span>Équité</span>
+                        <span class="text-success"><strong id="baselineEquity">--</strong></span>
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-4">
+                <div class="metric-card">
+                    <h5 class="mb-3">
+                        <i class="fas fa-expand-arrows-alt me-2"></i>
+                        Test Scalabilité
+                    </h5>
+                    <div class="d-flex justify-content-between mb-2">
+                        <span>Volume Maximum</span>
+                        <span><strong id="scalaMax">--</strong></span>
+                    </div>
+                    <div class="d-flex justify-content-between mb-2">
+                        <span>Taux de Réussite</span>
+                        <span class="text-success"><strong id="scalaSuccess">--</strong></span>
+                    </div>
+                    <div class="d-flex justify-content-between mb-2">
+                        <span>Débit Maximum</span>
+                        <span><strong id="scalaDebit">--</strong></span>
+                    </div>
+                    <div class="d-flex justify-content-between">
+                        <span>Scalabilité</span>
+                        <span class="text-success"><strong id="scalaStatus">--</strong></span>
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-4">
+                <div class="metric-card">
+                    <h5 class="mb-3">
+                        <i class="fas fa-mountain me-2"></i>
+                        Test Pics de Charge
+                    </h5>
+                    <div class="d-flex justify-content-between mb-2">
+                        <span>Requêtes Traitées</span>
+                        <span><strong id="spikeRequests">--</strong></span>
+                    </div>
+                    <div class="d-flex justify-content-between mb-2">
+                        <span>Taux de Réussite</span>
+                        <span class="text-success"><strong id="spikeSuccess">--</strong></span>
+                    </div>
+                    <div class="d-flex justify-content-between mb-2">
+                        <span>Pic Géré</span>
+                        <span><strong id="spikePeak">--</strong></span>
+                    </div>
+                    <div class="d-flex justify-content-between">
+                        <span>Récupération</span>
+                        <span class="text-success"><strong id="spikeRecovery">--</strong></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-12">
+                <div class="metric-card">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h5 class="mb-0">
+                            <i class="fas fa-rocket me-2"></i>
+                            Commandes pour Lancer les Tests
+                        </h5>
+                        <button class="btn btn-primary btn-sm" onclick="loadData()">
+                            <i class="fas fa-sync-alt me-1"></i>Actualiser
+                        </button>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="alert alert-success">
+                                <h6><i class="fas fa-play-circle me-2"></i>Tous les Scénarios</h6>
+                                <code>python tests/performance/run_all_scenarios.py --all</code>
+                                <p class="mb-0 mt-2">Lance les 3 scénarios complets avec rapports</p>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="alert alert-info">
+                                <h6><i class="fas fa-cog me-2"></i>Scénario Spécifique</h6>
+                                <code>python tests/performance/scenarios/scenario_1_baseline.py</code>
+                                <p class="mb-0 mt-2">Lance un scénario individuel</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="alert alert-warning">
+                        <i class="fas fa-info-circle me-2"></i>
+                        <strong>Note:</strong> Le dashboard se met à jour automatiquement quand vous lancez vos tests.
+                        Les métriques passent de "simulation" à "données réelles" pendant l'exécution.
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let realDataMode = false;
+        let updateInterval = null;
+
+        async function loadData() {
+            try {
+                const response = await fetch('/api/metrics');
+                const data = await response.json();
+
+                setRealDataMode(data.real_data);
+
+                if (data.real_data && data.data) {
+                    updateMetricsFromReal(data.data);
+                } else {
+                    updateMetricsFromSimulation(data.data);
+                }
+
+                updateLastUpdate();
+
+            } catch (error) {
+                console.error('Erreur chargement:', error);
+                setRealDataMode(false);
+            }
+        }
+
+        function updateMetricsFromReal(data) {
+            if (data.baseline) {
+                const baseline = data.baseline;
+                updateElement('currentThroughput', baseline.summary.max_throughput.toFixed(1));
+                updateElement('avgResponseTime', baseline.summary.avg_response_time.toFixed(2));
+                updateElement('equityRatio', baseline.performance.equity_ratio.toFixed(2));
+                updateElement('successRate', (baseline.summary.success_rate * 100).toFixed(1) + '%');
+
+                updateElement('baselineRequests', baseline.summary.total_requests);
+                updateElement('baselineSuccess', (baseline.summary.success_rate * 100).toFixed(0) + '%');
+                updateElement('baselineResponse', baseline.summary.avg_response_time.toFixed(2) + 's');
+                updateElement('baselineEquity', baseline.performance.equity_ratio.toFixed(2));
+            }
+
+            if (data.scalability) {
+                const scala = data.scalability;
+                const maxResult = scala.results[scala.results.length - 1];
+                updateElement('scalaMax', maxResult.volume + ' req');
+                updateElement('scalaSuccess', (maxResult.success_rate * 100).toFixed(0) + '%');
+                updateElement('scalaDebit', maxResult.throughput.toFixed(1) + ' req/s');
+                updateElement('scalaStatus', 'Linéaire');
+            }
+
+            if (data.spike) {
+                const spike = data.spike;
+                updateElement('spikeRequests', spike.summary.total_requests);
+                updateElement('spikeSuccess', (spike.summary.success_rate * 100).toFixed(0) + '%');
+                updateElement('spikePeak', spike.summary.max_throughput.toFixed(1) + ' req/s');
+                updateElement('spikeRecovery', 'Auto');
+            }
+        }
+
+        function updateMetricsFromSimulation(data) {
+            if (data.baseline) {
+                const baseline = data.baseline;
+                updateElement('currentThroughput', baseline.summary.max_throughput.toFixed(1));
+                updateElement('avgResponseTime', baseline.summary.avg_response_time.toFixed(2));
+                updateElement('equityRatio', baseline.performance.equity_ratio.toFixed(2));
+                updateElement('successRate', (baseline.summary.success_rate * 100).toFixed(1) + '%');
+
+                updateElement('baselineRequests', baseline.summary.total_requests);
+                updateElement('baselineSuccess', (baseline.summary.success_rate * 100).toFixed(0) + '%');
+                updateElement('baselineResponse', baseline.summary.avg_response_time.toFixed(2) + 's');
+                updateElement('baselineEquity', baseline.performance.equity_ratio.toFixed(2));
+            }
+
+            // Valeurs par défaut pour les autres
+            updateElement('scalaMax', '1000 req');
+            updateElement('scalaSuccess', '100%');
+            updateElement('scalaDebit', '7.6 req/s');
+            updateElement('scalaStatus', 'Linéaire');
+
+            updateElement('spikeRequests', '553');
+            updateElement('spikeSuccess', '100%');
+            updateElement('spikePeak', '8.2 req/s');
+            updateElement('spikeRecovery', 'Auto');
+        }
+
+        function setRealDataMode(isReal) {
+            realDataMode = isReal;
+            const indicator = document.getElementById('dataSourceIndicator');
+            const modeText = document.getElementById('dataMode');
+            const statusElement = document.getElementById('systemStatus');
+
+            if (isReal) {
+                indicator.className = 'data-source real-data';
+                modeText.textContent = 'Données Réelles (Tests détectés)';
+                indicator.innerHTML = '<i class="fas fa-check-circle me-2"></i><strong>Mode:</strong> <span id="dataMode">Données Réelles (Tests détectés)</span><br><small>Métriques authentiques de vos tests de performance</small>';
+
+                statusElement.innerHTML = '<span class="status-indicator status-online"></span><span>Tests Actifs</span>';
+            } else {
+                indicator.className = 'data-source simulated-data';
+                modeText.textContent = 'Simulation (Résultats de référence)';
+                indicator.innerHTML = '<i class="fas fa-info-circle me-2"></i><strong>Mode:</strong> <span id="dataMode">Simulation (Résultats de référence)</span><br><small>Affichage des résultats de vos tests précédents</small>';
+
+                statusElement.innerHTML = '<span class="status-indicator status-idle"></span><span>En Attente</span>';
+            }
+        }
+
+        function updateElement(id, value) {
+            const element = document.getElementById(id);
+            if (element) {
+                element.textContent = value;
+            }
+        }
+
+        function updateLastUpdate() {
+            document.getElementById('lastUpdate').textContent = 
+                'Dernière mise à jour: ' + new Date().toLocaleTimeString();
+        }
+
+        // Initialisation
+        document.addEventListener('DOMContentLoaded', function() {
+            loadData();
+
+            // Mise à jour automatique toutes les 5 secondes
+            updateInterval = setInterval(loadData, 5000);
+        });
+
+        // Nettoyage
+        window.addEventListener('beforeunload', function() {
+            if (updateInterval) {
+                clearInterval(updateInterval);
+            }
+        });
+    </script>
+</body>
+</html>

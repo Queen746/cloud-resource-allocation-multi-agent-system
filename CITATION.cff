@@ -1,0 +1,30 @@
+cff-version: 1.2.0
+
+title: "Cloud Resource Allocation Multi-Agent System"
+
+message: "If you use this software, please cite it as below."
+
+type: software
+
+authors:
+  - family-names: Dabo
+    given-names: Bineta
+    orcid: https://orcid.org/0009-0006-6853-2742
+
+repository-code: https://github.com/Queen746/cloud-resource-allocation-multi-agent-system
+
+license: MIT
+
+keywords:
+  - Cloud Computing
+  - Multi-Agent Systems
+  - Resource Allocation
+  - HRRN
+  - Topological Sorting
+  - SPADE
+
+abstract: >
+  A decentralized multi-agent system for fair cloud resource allocation
+  using HRRN scheduling and topological sorting.
+
+version: 1.0.0
