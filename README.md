@@ -53,10 +53,10 @@ The system is composed of four collaborative software agents:
 4. **MonitorAgent (MA)**  
    Continuously monitors system performance and collects execution metrics.
 
-> *(Insert your architecture diagram here)*
+> *<img width="1123" height="794" alt="Architecture" src="https://github.com/user-attachments/assets/06bea9a4-fda0-40cb-bd1e-cc6174b98e20" />
+*
 
 ```text
-images/Architecture.png
 ```
 
 ---
@@ -203,16 +203,16 @@ The evaluation considered:
 - Fairness between VIP and standard clients
 - Scalability under increasing workloads
 
-> *(Insert your dashboard screenshot here)*
+> *<img width="1300" height="601" alt="dashboard-main" src="https://github.com/user-attachments/assets/b0f710ff-7234-483e-bcce-e11629d7a348" />
+*
 
 ```text
-docs/dashboard.png
 ```
 
-> *(Insert your performance graphs here)*
+> *<img width="1274" height="589" alt="system-monitoring" src="https://github.com/user-attachments/assets/2c4c8ab8-5906-43ca-a97c-8d740d7f28af" />
+*
 
 ```text
-docs/performance.png
 ```
 
 ---
