@@ -5,8 +5,9 @@
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![ORCID](https://img.shields.io/badge/ORCID-0009--0006--6853--2742-A6CE39.svg)](https://orcid.org/0009-0006-6853-2742)
 [![Google Scholar](https://img.shields.io/badge/Google-Scholar-blue.svg)](https://scholar.google.com/citations?user=AxGs9B4AAAAJ&hl=fr)
+📄 Related publication available on HAL: https://hal.science/hal-05571848
 
-A Multi-Agent System (MAS) for fair and efficient cloud resource allocation developed as part of a Master's research project in Computer Science at **Cheikh Anta Diop University (UCAD), Senegal**.
+A Multi-Agent System (MAS) for fair and efficient cloud resource allocation developed as part of my Master's research in Computer Science at **Cheikh Anta Diop University (UCAD), Senegal**.
 
 The proposed system combines **HRRN (Highest Response Ratio Next)** scheduling with **topological sorting** to improve fairness between client requests while efficiently managing task dependencies in a cloud computing environment.
 
