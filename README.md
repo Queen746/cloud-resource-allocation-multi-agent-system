@@ -58,16 +58,9 @@ The system is composed of four collaborative software agents:
 
 4. **MonitorAgent (MA)**  
    Continuously monitors system performance and collects execution metrics.
+<p align="center">
+<img width="1123" height="794" alt="Architecture" src="https://github.com/user-attachments/assets/b09f6002-307d-4657-a397-bf296facb5b0" /></p>
 
-> *<img width="1123" height="794" alt="Architecture" src="https://github.com/user-attachments/assets/b09f6002-307d-4657-a397-bf296facb5b0" />
-
-
-*
-
-```text
-```
-
----
 
 ## Installation
 
