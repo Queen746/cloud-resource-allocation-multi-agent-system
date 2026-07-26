@@ -1,184 +1,280 @@
-# Système Multi-Agents pour l'Allocation de Ressources Cloud
+# Cloud Resource Allocation Multi-Agent System
 
-Ce projet implémente un système multi-agents décentralisé pour l'allocation efficace et équitable des ressources dans un environnement cloud. Le système utilise l'algorithme HRRN (Highest Response Ratio Next) pour l'ordonnancement des demandes et le tri topologique pour gérer les dépendances entre tâches.
+A Multi-Agent System (MAS) for fair and efficient cloud resource allocation developed as part of a Master's research project in Computer Science at **Cheikh Anta Diop University (UCAD), Senegal**.
 
-## Caractéristiques
+The proposed system combines **HRRN (Highest Response Ratio Next)** scheduling with **topological sorting** to improve fairness between client requests while efficiently managing task dependencies in a cloud computing environment.
 
-- **Architecture décentralisée** : 4 agents spécialisés collaborant pour optimiser l'allocation des ressources
-- **Mécanisme d'équité** : Algorithme HRRN garantissant l'équité entre demandes VIP et standard
-- **Gestion des dépendances** : Tri topologique pour optimiser l'ordre d'exécution des tâches interdépendantes
-- **Tableau de bord web** : Interface de visualisation en temps réel des métriques du système
-- **Hautement configurable** : Paramètres ajustables via un fichier de configuration YAML
+This repository contains the implementation, dashboard, configuration files, and performance evaluation used during the research work.
 
-## Architecture
+---
 
-Le système est composé de quatre agents principaux :
+## Table of Contents
 
-1. **ClientManagerAgent (CMA)** : Gère les files d'attente des demandes et implémente l'algorithme HRRN
-2. **ResourceManagerAgent (RMA)** : Gère l'allocation effective des ressources et les dépendances via le tri topologique
-3. **LoadBalancerAgent (LBA)** : Optimise le placement des ressources et équilibre les charges
-4. **MonitorAgent (MA)** : Surveille l'état du système et génère des rapports
+- [Features](#features)
+- [System Architecture](#system-architecture)
+- [Installation](#installation)
+- [Configuration](#configuration)
+- [Usage](#usage)
+- [Project Structure](#project-structure)
+- [Algorithms](#algorithms)
+- [Experimental Results](#experimental-results)
+- [Related Publication](#related-publication)
+- [Citation](#citation)
+- [Author](#author)
+- [License](#license)
 
-## Prérequis
+---
 
-- Python 3.9+
-- Prosody ou un autre serveur XMPP pour la communication entre agents
-- Bibliothèques listées dans `requirements.txt`
+## Features
+
+- Multi-Agent System (MAS) architecture
+- Fair resource allocation using HRRN scheduling
+- Dependency management through topological sorting
+- Distributed resource management
+- Real-time monitoring dashboard
+- Configurable simulation parameters
+- Performance evaluation and scalability analysis
+
+---
+
+## System Architecture
+
+The system is composed of four collaborative software agents:
+
+1. **ClientManagerAgent (CMA)**  
+   Receives client requests, manages waiting queues and computes priorities using the HRRN scheduling algorithm.
+
+2. **ResourceManagerAgent (RMA)**  
+   Allocates cloud resources while respecting task dependencies using topological sorting.
+
+3. **LoadBalancerAgent (LBA)**  
+   Balances workloads across available resources to improve system utilization.
+
+4. **MonitorAgent (MA)**  
+   Continuously monitors system performance and collects execution metrics.
+
+> *(Insert your architecture diagram here)*
+
+```text
+docs/architecture.png
+```
+
+---
 
 ## Installation
 
-1. Cloner le dépôt :
-   ```
-   git clone https://github.com/yourusername/cloud-mas.git
-   cd cloud-mas
-   ```
+### Requirements
 
-2. Installer les dépendances :
-   ```
-   pip install -r requirements.txt
-   ```
+- Python 3.9 or later
+- SPADE framework
+- Prosody (or another XMPP server)
+- Dependencies listed in `requirements.txt`
 
-3. Configurer un serveur XMPP (si non disponible) :
-   ```
-   # Installation de Prosody sur Ubuntu
-   sudo apt-get install prosody
-   
-   # Configuration minimale
-   sudo nano /etc/prosody/prosody.cfg.lua
-   
-   # Ajouter un hôte virtuel
-   VirtualHost "localhost"
-       authentication = "internal_plain"
-       allow_registration = true
-   
-   # Redémarrer Prosody
-   sudo systemctl restart prosody
-   ```
+Clone the repository:
 
-4. Créer des comptes pour les agents :
-   ```
-   # Dans l'interpréteur de commandes Prosody
-   sudo prosodyctl adduser client_manager@localhost
-   sudo prosodyctl adduser resource_manager@localhost
-   sudo prosodyctl adduser load_balancer@localhost
-   sudo prosodyctl adduser monitor_agent@localhost
-   ```
+```bash
+git clone https://github.com/Queen746/cloud-resource-allocation-multi-agent-system.git
+cd cloud-resource-allocation-multi-agent-system
+```
+
+Install dependencies:
+
+```bash
+pip install -r requirements.txt
+```
+
+---
 
 ## Configuration
 
-Créer un fichier `config.yaml` à la racine du projet :
+Create a configuration file named `config.yaml`.
+
+Example:
 
 ```yaml
-# Serveur XMPP
 xmpp_server: "localhost"
 xmpp_domain: "localhost"
 xmpp_password: "password"
 
-# Durée de la simulation (en secondes)
 simulation_duration: 300
 
-# Clients simulés
 vip_clients: 5
 standard_clients: 20
-request_rate: 0.2  # Demandes par seconde
 
-# Configuration des ressources
 resource_config:
-  available_cpu: 100.0
-  available_memory: 256.0
-  available_storage: 1000.0
-
-# Configuration de l'ordonnanceur
-scheduler_config:
-  vip_priority_factor: 2.0
-  aging_factor: 0.5
-
-# URL du tableau de bord
-dashboard_url: "http://localhost:5000"
+  available_cpu: 100
+  available_memory: 256
+  available_storage: 1000
 ```
 
-## Utilisation
+Additional parameters can be customized according to the desired simulation scenario.
 
-1. Démarrer le tableau de bord :
-   ```
-   python dashboard/app.py
-   ```
+---
 
-2. Lancer la simulation :
-   ```
-   python run_simulation.py config.yaml
-   ```
+## Usage
 
-3. Accéder au tableau de bord à l'adresse http://localhost:5000
+Start the monitoring dashboard:
 
-## Structure du Projet
-
-```
-cloud-mas/
-├── README.md                   # Documentation principale du projet
-├── requirements.txt            # Dépendances du projet
-├── config.yaml                 # Configuration du système
-├── run_simulation.py           # Point d'entrée principal pour lancer la simulation
-├── dashboard/                  # Interface web pour la visualisation et le contrôle
-│   ├── app.py                  # Application Flask pour le tableau de bord
-│   ├── static/                 # Ressources statiques (CSS, JS)
-│   └── templates/              # Templates HTML
-├── agents/                     # Implémentation des agents
-│   ├── __init__.py             
-│   ├── base_agent.py           # Classe de base pour tous les agents
-│   ├── client_manager_agent.py # Gestion des files d'attente et priorités
-│   ├── resource_manager_agent.py # Allocation de ressources et gestion des dépendances
-│   ├── load_balancer_agent.py  # Optimisation du placement des ressources
-│   ├── monitor_agent.py        # Surveillance et adaptation du système
-│   └── behaviors/              # Comportements spécifiques des agents
-├── models/                     # Modèles de données du système
-│   ├── __init__.py
-│   ├── resource_request.py     # Demandes de ressources
-│   ├── client.py               # Clients (VIP/Standard)
-│   ├── system_state.py         # État global du système
-│   └── enums.py                # Énumérations (ClientType, RequestStatus, etc.)
-├── utils/                      # Utilitaires
-│   ├── __init__.py
-│   ├── topological_sorter.py   # Implémentation du tri topologique
-│   ├── hrrn_scheduler.py       # Implémentation de l'algorithme HRRN
-│   └── metrics_collector.py    # Collecte et analyse des métriques
-└── tests/                      # Tests unitaires et d'intégration
+```bash
+python dashboard/app.py
 ```
 
-## Algorithmes Principaux
+Run the simulation:
 
-### 1. HRRN (Highest Response Ratio Next)
-
-L'algorithme HRRN calcule une priorité pour chaque demande selon la formule :
-
-```
-Priorité = (Temps d'attente + Temps d'exécution estimé) / Temps d'exécution estimé
+```bash
+python run_simulation.py config.yaml
 ```
 
-Notre implémentation ajoute un facteur de priorité et un mécanisme de vieillissement :
+Open your browser at:
 
 ```
-Priorité effective = Base priorité × HRRN + (Facteur vieillissement × Temps d'attente)
+http://localhost:5000
 ```
 
-### 2. Tri Topologique
+---
 
-Le tri topologique est utilisé pour déterminer un ordre d'exécution valide respectant toutes les dépendances. Notre implémentation utilise l'algorithme de Kahn :
+## Project Structure
 
-1. Identifier les nœuds sans prédécesseurs (sources)
-2. Ajouter ces nœuds à la solution
-3. Retirer ces nœuds et leurs arêtes sortantes du graphe
-4. Répéter jusqu'à ce que le graphe soit vide
+```
+cloud-resource-allocation-multi-agent-system/
+│
+├── agents/
+│   ├── client_manager_agent.py
+│   ├── resource_manager_agent.py
+│   ├── load_balancer_agent.py
+│   └── monitor_agent.py
+│
+├── dashboard/
+│
+├── models/
+│
+├── tests/
+│
+├── utils/
+│
+├── config/
+│
+├── requirements.txt
+├── README.md
+├── LICENSE
+└── CITATION.cff
+```
 
-## Licence
+---
 
-Ce projet est sous licence MIT. Voir le fichier LICENSE pour plus de détails.
+## Algorithms
 
-## Contributeurs
+### Highest Response Ratio Next (HRRN)
 
-- Votre Nom (@votre-username)
+The HRRN scheduling policy computes the priority of each request according to:
 
-## Remerciements
+```
+Priority = (Waiting Time + Estimated Execution Time)
+           / Estimated Execution Time
+```
 
-- Remerciements à l'équipe de développement de SPADE pour leur excellente plateforme multi-agents
-- Merci au professeur XXX pour ses conseils et retours précieux
+This strategy naturally increases the priority of requests that have waited longer, reducing starvation while maintaining fairness.
+
+---
+
+### Topological Sorting
+
+Topological sorting is used to execute dependent tasks in a valid order.
+
+The implementation follows Kahn's algorithm:
+
+1. Identify tasks without predecessors.
+2. Execute them.
+3. Remove completed dependencies.
+4. Repeat until all tasks have been processed.
+
+---
+
+## Experimental Results
+
+The proposed approach was evaluated through several simulation scenarios involving different workloads.
+
+The evaluation considered:
+
+- Allocation success rate
+- Resource utilization
+- Average response time
+- Waiting time
+- Fairness between VIP and standard clients
+- Scalability under increasing workloads
+
+> *(Insert your dashboard screenshot here)*
+
+```text
+docs/dashboard.png
+```
+
+> *(Insert your performance graphs here)*
+
+```text
+docs/performance.png
+```
+
+---
+
+## Related Publication
+
+**Bineta Dabo**
+
+**Proposition d'un modèle de système multi-agents pour l'allocation équitable des ressources dans le Cloud Computing**
+
+Accepted at **COC'2026**
+
+HAL publication:
+
+https://hal.science/hal-05571848
+
+---
+
+## Citation
+
+If you use this repository in your research, please cite it using the information provided in the `CITATION.cff` file.
+
+BibTeX:
+
+```bibtex
+@software{dabo2026cloudmas,
+  author = {Bineta Dabo},
+  title = {Cloud Resource Allocation Multi-Agent System},
+  year = {2026},
+  url = {https://github.com/Queen746/cloud-resource-allocation-multi-agent-system},
+  orcid = {https://orcid.org/0009-0006-6853-2742}
+}
+```
+
+---
+
+## Author
+
+**Bineta Dabo**
+
+Master's Student in Computer Science
+
+Cheikh Anta Diop University (UCAD), Senegal
+
+- ORCID: https://orcid.org/0009-0006-6853-2742
+- Google Scholar: https://scholar.google.com/citations?user=AxGs9B4AAAAJ&hl=fr
+- LinkedIn: https://www.linkedin.com/in/bineta-dabo-4584a71b1
+
+---
+
+## License
+
+This project is distributed under the MIT License.
+
+See the **LICENSE** file for more information.
+
+---
+
+## Acknowledgements
+
+The author would like to thank:
+
+- Cheikh Anta Diop University (UCAD)
+- The SPADE development community
+- The organizers of COC'2026

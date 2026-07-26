@@ -1,9 +1,6 @@
 cff-version: 1.2.0
-
-title: "Cloud Resource Allocation Multi-Agent System"
-
-message: "If you use this software, please cite it as below."
-
+title: Cloud Resource Allocation Multi-Agent System
+message: "If you use this software, please cite it as follows."
 type: software
 
 authors:
@@ -16,15 +13,11 @@ repository-code: https://github.com/Queen746/cloud-resource-allocation-multi-age
 license: MIT
 
 keywords:
-  - Cloud Computing
   - Multi-Agent Systems
+  - Cloud Computing
   - Resource Allocation
   - HRRN
   - Topological Sorting
   - SPADE
 
-abstract: >
-  A decentralized multi-agent system for fair cloud resource allocation
-  using HRRN scheduling and topological sorting.
-
-version: 1.0.0
+date-released: 2026
