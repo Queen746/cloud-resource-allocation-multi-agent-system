@@ -56,7 +56,7 @@ The system is composed of four collaborative software agents:
 > *(Insert your architecture diagram here)*
 
 ```text
-docs/architecture.png
+images/Architecture.png
 ```
 
 ---
